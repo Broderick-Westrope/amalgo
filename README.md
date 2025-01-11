@@ -168,6 +168,14 @@ Contributions are welcome! Feel free to open issues and submit pull requests.
 
 I encourage you to create an issue and spark a discussion there before beginning work on a large change. This way we can be clear on the goals and acceptance criteria before investing time on it.
 
+### What could be improved?
+
+Here are some suggestions:
+
+- **Language parsers:** If you would like to add first-class support for a new language that would be great! The `parser` package contains a `Parser` interface that defines what your new parser should include.
+- **Tests:** Currently the testing for this tool is limited. Most of it was created in a single night and I didn't slow down to test things. Start a discussion with your ideas or jump right in.
+- **Ideas:** The thing I'm most interested in hearing is ideas for unique use cases. If the use case requires some modifications that's fine. Similarly, if you think something can be done better I'd love to hear it. This is a relatively small CLI utility, so a bit of growth/change is acceptable for a cool enough use case ;)
+
 ## License
 
 This project is licensed under the GNU GPL v3 License - see the [LICENSE](./LICENSE) file for details.
