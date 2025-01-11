@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/Broderick-Westrope/amalgo/internal/output"
 	"github.com/Broderick-Westrope/amalgo/internal/parser"
@@ -18,53 +19,68 @@ func New(version string) *RootCmd {
 
 type RootCmd struct {
 	// Default command args and flags
-	Dirs          []string `arg:"" optional:"" help:"Directories to analyze. Defaults to current directory." type:"path"`
-	Output        string   `help:"Output file path. Defaults to './amalgo.txt'." short:"o" type:"path"`
+	Dirs          []string `arg:"" optional:"" help:"Directories to analyze." type:"path" default:"."`
+	Output        string   `help:"Output file path." short:"o" type:"path" default:"amalgo.txt"`
 	IgnoreDirs    []string `help:"Directories to ignore." short:"i" placeholder:"DIR"`
-	Extensions    []string `help:"File extensions to include." short:"e" placeholder:"EXT"`
-	IncludeAll    bool     `help:"Include all files regardless of extension." default:"false"`
+	Filter        []string `help:"File patterns to include (e.g. '*.go', '*.{js,ts}')." short:"f" placeholder:"PATTERN" default:"*"`
 	IncludeHidden bool     `help:"Include hidden files and directories." default:"false"`
 	NoTree        bool     `help:"Skip directory tree generation." default:"false"`
 	NoDump        bool     `help:"Skip file content dumping." default:"false"`
 	Outline       bool     `help:"Generate language-specific outlines." default:"false"`
 	NoColor       bool     `help:"Don't use color in the terminal output." default:"false"`
+	IncludeBinary bool     `help:"Include binary files." default:"false"`
 
 	// Subcommands
 	Version versionFlag `help:"Print version information and quit" short:"v" name:"version"`
 }
 
-func (c *RootCmd) Run() error {
+func (c *RootCmd) validate() bool {
+	issues := make([]string, 0)
 	if len(c.Dirs) == 0 {
-		c.Dirs = []string{"."}
+		issues = append(issues, "At least one input directory is required.")
+	}
+	if c.Output == "" {
+		issues = append(issues, "Output cannot be empty.")
+	}
+	if c.NoDump && c.NoTree && !c.Outline {
+		issues = append(issues, "An empty output is not allowed (no dump, no tree, and no outline).")
 	}
 
-	if c.Output == "" {
-		c.Output = "amalgo.txt"
+	if len(issues) == 0 {
+		return true
+	}
+	out := strings.Join(issues, "\n")
+	if !c.NoColor {
+		out = color.RedString(out)
+	}
+	fmt.Println(out)
+	return false
+}
+
+func (c *RootCmd) Run() error {
+	if !c.validate() {
+		return nil
 	}
 
 	registry := parser.NewRegistry()
 	registry.Register(parser.NewGoParser())
-	// Add more parsers here as they're implemented
-	// registry.Register(parser.NewPythonParser())
-	// registry.Register(parser.NewJavaScriptParser())
 
 	traverseOpts := traverse.Options{
-		Extensions:    c.Extensions,
-		IncludeAll:    c.IncludeAll,
+		GlobPatterns:  c.Filter,
 		IncludeHidden: c.IncludeHidden,
 		IgnoreDirs:    c.IgnoreDirs,
 	}
 
-	// Get all matching paths
 	paths, err := traverse.GetPaths(c.Dirs, traverseOpts)
 	if err != nil {
 		return fmt.Errorf("traversing directories: %w", err)
 	}
 
 	outputOpts := output.Options{
-		NoTree:  c.NoTree,
-		NoDump:  c.NoDump,
-		Outline: c.Outline,
+		NoTree:     c.NoTree,
+		NoDump:     c.NoDump,
+		Outline:    c.Outline,
+		SkipBinary: !c.IncludeBinary,
 	}
 
 	generator := output.NewGenerator(c.Output, registry)
@@ -72,7 +88,7 @@ func (c *RootCmd) Run() error {
 		return fmt.Errorf("generating output: %w", err)
 	}
 
-	// Print success message unless output is stdout
+	// Print success message unless output is stdout.
 	if c.Output != "stdout" && c.Output != "-" {
 		msg := fmt.Sprintf("Successfully generated output to: %s\n", c.Output)
 		if !c.NoColor {

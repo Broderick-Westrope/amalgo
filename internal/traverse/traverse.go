@@ -1,10 +1,13 @@
 package traverse
 
 import (
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/gobwas/glob"
 )
 
 // PathInfo represents information about a file or directory
@@ -17,8 +20,7 @@ type PathInfo struct {
 
 // Options configures the traversal behavior
 type Options struct {
-	Extensions    []string
-	IncludeAll    bool
+	GlobPatterns  []string
 	IncludeHidden bool
 	IgnoreDirs    []string
 }
@@ -30,6 +32,15 @@ func GetPaths(directories []string, opts Options) ([]PathInfo, error) {
 	}
 
 	var paths []PathInfo
+	matchers := make([]glob.Glob, len(opts.GlobPatterns))
+
+	for i, pattern := range opts.GlobPatterns {
+		g, err := glob.Compile(pattern)
+		if err != nil {
+			return nil, fmt.Errorf("invalid pattern '%s': %w", pattern, err)
+		}
+		matchers[i] = g
+	}
 
 	for _, dir := range directories {
 		basePath, err := filepath.Abs(dir)
@@ -68,7 +79,11 @@ func GetPaths(directories []string, opts Options) ([]PathInfo, error) {
 
 			// Check if path should be ignored
 			for _, ignoreDir := range opts.IgnoreDirs {
-				if strings.HasPrefix(path, ignoreDir) {
+				ignorePath, err := filepath.Abs(ignoreDir)
+				if err != nil {
+					continue
+				}
+				if strings.HasPrefix(path, ignorePath) {
 					if d.IsDir() {
 						return filepath.SkipDir
 					}
@@ -85,9 +100,16 @@ func GetPaths(directories []string, opts Options) ([]PathInfo, error) {
 			}
 
 			isDir := d.IsDir()
-			if !isDir && !opts.IncludeAll {
-				ext := strings.ToLower(filepath.Ext(path))
-				if !contains(opts.Extensions, ext) {
+			if !isDir {
+				matched := false
+				name := filepath.Base(path)
+				for _, matcher := range matchers {
+					if matcher.Match(name) {
+						matched = true
+						break
+					}
+				}
+				if !matched {
 					return nil
 				}
 			}
