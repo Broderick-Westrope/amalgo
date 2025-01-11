@@ -49,23 +49,47 @@ func GenerateTree(paths []traverse.PathInfo) string {
 	var builder strings.Builder
 	builder.WriteString("Directory Tree\n")
 
+	// Create a map of paths to their children
+	children := make(map[string][]traverse.PathInfo)
 	for _, path := range paths {
 		if path.Depth == 0 {
 			continue
 		}
+		parent := filepath.Dir(path.Path)
+		children[parent] = append(children[parent], path)
+	}
 
-		var indent string
-		if path.Depth == 1 {
-			indent = "├── "
-		} else {
-			indent = strings.Repeat("│   ", path.Depth-2) + "├── "
+	// Helper function to recursively print the tree
+	var printTree func(path traverse.PathInfo, prefix string, isLast bool)
+	printTree = func(path traverse.PathInfo, prefix string, isLast bool) {
+		// Print current item
+		connector := "├── "
+		if isLast {
+			connector = "└── "
 		}
 
 		name := filepath.Base(path.Path)
 		if path.IsDir {
 			name += "/"
 		}
-		builder.WriteString(fmt.Sprintf("%s%s\n", indent, name))
+		builder.WriteString(fmt.Sprintf("%s%s%s\n", prefix, connector, name))
+
+		// Print children
+		childPrefix := prefix + "│   "
+		if isLast {
+			childPrefix = prefix + "    "
+		}
+
+		pathChildren := children[path.Path]
+		for i, child := range pathChildren {
+			printTree(child, childPrefix, i == len(pathChildren)-1)
+		}
+	}
+
+	// Process root level items
+	rootPaths := children[filepath.Dir(paths[0].Path)]
+	for i, path := range rootPaths {
+		printTree(path, "", i == len(rootPaths)-1)
 	}
 
 	return builder.String()

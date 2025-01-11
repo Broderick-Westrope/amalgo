@@ -21,6 +21,7 @@ type RootCmd struct {
 	// Default command args and flags
 	Dirs          []string `arg:"" optional:"" help:"Directories to analyze." type:"path" default:"."`
 	Output        string   `help:"Output file path." short:"o" type:"path" default:"amalgo.txt"`
+	Stdout        bool     `help:"Write output to stdout instead of file."`
 	IgnoreDirs    []string `help:"Directories to ignore." short:"i" placeholder:"DIR"`
 	Filter        []string `help:"File patterns to include (e.g. '*.go', '*.{js,ts}')." short:"f" placeholder:"PATTERN" default:"*"`
 	IncludeHidden bool     `help:"Include hidden files and directories." default:"false"`
@@ -62,6 +63,11 @@ func (c *RootCmd) Run() error {
 		return nil
 	}
 
+	outputDest := c.Output
+	if c.Stdout {
+		outputDest = "stdout"
+	}
+
 	registry := parser.NewRegistry()
 	registry.Register(parser.NewGoParser())
 
@@ -83,14 +89,14 @@ func (c *RootCmd) Run() error {
 		SkipBinary: !c.IncludeBinary,
 	}
 
-	generator := output.NewGenerator(c.Output, registry)
+	generator := output.NewGenerator(outputDest, registry)
 	if err := generator.Generate(paths, outputOpts); err != nil {
 		return fmt.Errorf("generating output: %w", err)
 	}
 
 	// Print success message unless output is stdout.
-	if c.Output != "stdout" && c.Output != "-" {
-		msg := fmt.Sprintf("Successfully generated output to: %s\n", c.Output)
+	if outputDest != "stdout" {
+		msg := fmt.Sprintf("Successfully generated output to: %s\n", outputDest)
 		if !c.NoColor {
 			msg = color.GreenString(msg)
 		}

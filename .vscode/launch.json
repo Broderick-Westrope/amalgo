@@ -11,7 +11,9 @@
             "mode": "auto",
             "program": "${workspaceFolder}",
             "args": [
-                "internal/output"
+                "-o",
+                "stdout",
+                "--no-dump"
             ]
         },
     ]
