@@ -75,3 +75,5 @@ This is intended to be a haphazard list of ideas for the project. If anything re
 - Add options for obfuscating specific patterns (e.g., API keys)
 - Include basic security scanning capabilities
 - Add support for scanning dependencies for known vulnerabilities
+
+- Feature idea: flag to honour gitignore. Glob passing is already in, would just need a way to reliably read gitignore files. Should not overwrite other flags.
