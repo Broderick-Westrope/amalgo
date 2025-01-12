@@ -23,7 +23,7 @@ type RootCmd struct {
 	Output        string   `help:"Output file path." short:"o" type:"path" default:"amalgo.txt"`
 	Stdout        bool     `help:"Write output to stdout instead of file."`
 	IgnoreDirs    []string `help:"Directories to ignore." short:"i" placeholder:"DIR"`
-	Filter        []string `help:"File patterns to include (e.g. '*.go', '*.{js,ts}')." short:"f" placeholder:"PATTERN" default:"*"`
+	Filter        []string `help:"File patterns to include and exclude (e.g. '*.go,*.{js,ts}', or '*,!.md')." short:"f" placeholder:"PATTERN" default:"*"`
 	IncludeHidden bool     `help:"Include hidden files and directories." default:"false"`
 	NoTree        bool     `help:"Skip directory tree generation." default:"false"`
 	NoDump        bool     `help:"Skip file content dumping." default:"false"`
@@ -71,10 +71,22 @@ func (c *RootCmd) Run() error {
 	registry := parser.NewRegistry()
 	registry.Register(parser.NewGoParser())
 
+	includePatterns := make([]string, 0)
+	excludePatterns := make([]string, 0)
+	for _, original := range c.Filter {
+		new, found := strings.CutPrefix(original, "!")
+		if found {
+			excludePatterns = append(excludePatterns, new)
+		} else {
+			includePatterns = append(includePatterns, original)
+		}
+	}
+
 	traverseOpts := traverse.Options{
-		GlobPatterns:  c.Filter,
-		IncludeHidden: c.IncludeHidden,
-		IgnoreDirs:    c.IgnoreDirs,
+		IncludePatterns: includePatterns,
+		ExcludePatterns: excludePatterns,
+		IncludeHidden:   c.IncludeHidden,
+		IgnoreDirs:      c.IgnoreDirs,
 	}
 
 	paths, err := traverse.GetPaths(c.Dirs, traverseOpts)

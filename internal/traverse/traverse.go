@@ -20,9 +20,10 @@ type PathInfo struct {
 
 // Options configures the traversal behavior
 type Options struct {
-	GlobPatterns  []string
-	IncludeHidden bool
-	IgnoreDirs    []string
+	IncludePatterns []string
+	ExcludePatterns []string
+	IncludeHidden   bool
+	IgnoreDirs      []string
 }
 
 // GetPaths traverses directories and collects path information
@@ -31,17 +32,17 @@ func GetPaths(directories []string, opts Options) ([]PathInfo, error) {
 		directories = []string{"."}
 	}
 
-	var paths []PathInfo
-	matchers := make([]glob.Glob, len(opts.GlobPatterns))
-
-	for i, pattern := range opts.GlobPatterns {
-		g, err := glob.Compile(pattern)
-		if err != nil {
-			return nil, fmt.Errorf("invalid pattern '%s': %w", pattern, err)
-		}
-		matchers[i] = g
+	includeMatchers, err := createPatternMatchers(opts.IncludePatterns)
+	if err != nil {
+		return nil, fmt.Errorf("creating include pattern matchers")
 	}
 
+	excludeMatchers, err := createPatternMatchers(opts.ExcludePatterns)
+	if err != nil {
+		return nil, fmt.Errorf("creating exclude pattern matchers")
+	}
+
+	var paths []PathInfo
 	for _, dir := range directories {
 		basePath, err := filepath.Abs(dir)
 		if err != nil {
@@ -102,8 +103,20 @@ func GetPaths(directories []string, opts Options) ([]PathInfo, error) {
 			isDir := d.IsDir()
 			if !isDir {
 				matched := false
-				name := filepath.Base(path)
-				for _, matcher := range matchers {
+				_, name := filepath.Split(path)
+				for _, matcher := range excludeMatchers {
+					if matcher.Match(name) {
+						matched = true
+						break
+					}
+				}
+				if matched {
+					return nil
+				}
+
+				matched = false
+				_, name = filepath.Split(path)
+				for _, matcher := range includeMatchers {
 					if matcher.Match(name) {
 						matched = true
 						break
@@ -146,4 +159,16 @@ func contains(slice []string, item string) bool {
 		}
 	}
 	return false
+}
+
+func createPatternMatchers(patterns []string) ([]glob.Glob, error) {
+	matchers := make([]glob.Glob, len(patterns))
+	for i, pattern := range patterns {
+		g, err := glob.Compile(pattern)
+		if err != nil {
+			return nil, fmt.Errorf("compiling glob pattern '%s': %w", pattern, err)
+		}
+		matchers[i] = g
+	}
+	return matchers, nil
 }
