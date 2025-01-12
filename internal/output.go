@@ -1,4 +1,4 @@
-package output
+package internal
 
 import (
 	"fmt"
@@ -6,13 +6,19 @@ import (
 	"strings"
 
 	"github.com/Broderick-Westrope/amalgo/internal/parser"
-	"github.com/Broderick-Westrope/amalgo/internal/traverse"
-	"github.com/Broderick-Westrope/amalgo/internal/utils"
 )
 
-// Generate creates the complete output file
-func Generate(paths []traverse.PathInfo, registry *parser.Registry, opts Options) (string, error) {
-	output := fmt.Sprintf("## Generated with Amalgo at: %s\n\n", utils.FormatTimestamp())
+// Options configures the output generation
+type OutputOptions struct {
+	NoTree     bool
+	NoDump     bool
+	Outline    bool
+	SkipBinary bool
+}
+
+// GenerateOutput creates the complete output string
+func GenerateOutput(paths []PathInfo, registry *parser.Registry, opts OutputOptions) (string, error) {
+	output := fmt.Sprintf("## Generated with Amalgo at: %s\n\n", FormatTimestamp())
 
 	if !opts.NoTree {
 		output += generateTree(paths)
@@ -36,15 +42,7 @@ func Generate(paths []traverse.PathInfo, registry *parser.Registry, opts Options
 	return output, nil
 }
 
-// Options configures the output generation
-type Options struct {
-	NoTree     bool
-	NoDump     bool
-	Outline    bool
-	SkipBinary bool
-}
-
-func generateOutlines(paths []traverse.PathInfo, registry *parser.Registry) (string, error) {
+func generateOutlines(paths []PathInfo, registry *parser.Registry) (string, error) {
 	output := "\n## Language-Specific Outlines\n\n"
 
 	var temp string
@@ -132,7 +130,7 @@ func writeSymbols(symbols []*parser.Symbol, depth int) (string, error) {
 	return output, nil
 }
 
-func dumpFiles(paths []traverse.PathInfo, skipBinary bool) (string, error) {
+func dumpFiles(paths []PathInfo, skipBinary bool) (string, error) {
 	var sb strings.Builder
 	sb.WriteString("\n## File Contents\n\n")
 
@@ -143,7 +141,7 @@ func dumpFiles(paths []traverse.PathInfo, skipBinary bool) (string, error) {
 
 		if skipBinary {
 			// Check if file is binary
-			isBinary, err := utils.IsBinaryFile(path.Path)
+			isBinary, err := IsBinaryFile(path.Path)
 			if err != nil {
 				return "", fmt.Errorf("failed to check if file is binary: %w", err)
 			}
@@ -169,7 +167,7 @@ func dumpFiles(paths []traverse.PathInfo, skipBinary bool) (string, error) {
 	return sb.String(), nil
 }
 
-func generateTree(paths []traverse.PathInfo) string {
-	tree := utils.GenerateTree(paths)
+func generateTree(paths []PathInfo) string {
+	tree := GenerateTree(paths)
 	return fmt.Sprintf("\n## File Tree\n\n%s\n", tree)
 }

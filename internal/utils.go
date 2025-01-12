@@ -1,4 +1,4 @@
-package utils
+package internal
 
 import (
 	"bytes"
@@ -8,8 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
-
-	"github.com/Broderick-Westrope/amalgo/internal/traverse"
 )
 
 // IsBinaryFile determines if a file is binary by checking its contents
@@ -44,8 +42,8 @@ func IsBinaryFile(path string) (bool, error) {
 }
 
 // GenerateTree creates a textual representation of the directory structure
-func GenerateTree(paths []traverse.PathInfo) string {
-	mapPathToChildren := make(map[string][]traverse.PathInfo)
+func GenerateTree(paths []PathInfo) string {
+	mapPathToChildren := make(map[string][]PathInfo)
 	for _, path := range paths {
 		if path.Depth == 0 {
 			continue
@@ -55,8 +53,8 @@ func GenerateTree(paths []traverse.PathInfo) string {
 	}
 
 	var sb strings.Builder
-	var printTree func(path traverse.PathInfo, prefix string, isLast bool)
-	printTree = func(path traverse.PathInfo, prefix string, isLast bool) {
+	var printTree func(path PathInfo, prefix string, isLast bool)
+	printTree = func(path PathInfo, prefix string, isLast bool) {
 		// Print current item
 		connector := "├── "
 		if isLast {

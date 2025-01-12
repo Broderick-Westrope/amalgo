@@ -1,4 +1,4 @@
-package traverse
+package internal
 
 import (
 	"fmt"
@@ -18,20 +18,14 @@ type PathInfo struct {
 	IsDir        bool
 }
 
-// Options configures the traversal behavior
-type Options struct {
-	IncludePatterns []string // Patterns for files/directories to include
-	ExcludePatterns []string // Patterns for files/directories to exclude
-}
-
-// GetPaths traverses directories and collects path information
-func GetPaths(directories []string, opts Options) ([]PathInfo, error) {
-	includeMatchers, err := createPatternMatchers(opts.IncludePatterns)
+// TraverseDirectories traverses directories and collects path information
+func TraverseDirectories(directories []string, includePatterns []string, excludePatterns []string) ([]PathInfo, error) {
+	includeMatchers, err := createPatternMatchers(includePatterns)
 	if err != nil {
 		return nil, fmt.Errorf("creating include pattern matchers: %w", err)
 	}
 
-	excludeMatchers, err := createPatternMatchers(opts.ExcludePatterns)
+	excludeMatchers, err := createPatternMatchers(excludePatterns)
 	if err != nil {
 		return nil, fmt.Errorf("creating exclude pattern matchers: %w", err)
 	}
