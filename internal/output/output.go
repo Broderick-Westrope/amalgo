@@ -10,30 +10,16 @@ import (
 	"github.com/Broderick-Westrope/amalgo/internal/utils"
 )
 
-// Generator handles the creation of the consolidated output file
-type Generator struct {
-	registry *parser.Registry
-	output   string
-}
-
-// NewGenerator creates a new output generator
-func NewGenerator(output string, registry *parser.Registry) *Generator {
-	return &Generator{
-		registry: registry,
-		output:   output,
-	}
-}
-
 // Generate creates the complete output file
-func (g *Generator) Generate(paths []traverse.PathInfo, opts Options) (string, error) {
+func Generate(paths []traverse.PathInfo, registry *parser.Registry, opts Options) (string, error) {
 	output := fmt.Sprintf("## Generated with Amalgo at: %s\n\n", utils.FormatTimestamp())
 
 	if !opts.NoTree {
-		output += g.generateTree(paths)
+		output += generateTree(paths)
 	}
 
 	if opts.Outline {
-		outlines, err := g.generateOutlines(paths)
+		outlines, err := generateOutlines(paths, registry)
 		if err != nil {
 			return "", fmt.Errorf("generating outlines: %w", err)
 		}
@@ -41,7 +27,7 @@ func (g *Generator) Generate(paths []traverse.PathInfo, opts Options) (string, e
 	}
 
 	if !opts.NoDump {
-		filesDump, err := g.dumpFiles(paths, opts.SkipBinary)
+		filesDump, err := dumpFiles(paths, opts.SkipBinary)
 		if err != nil {
 			return "", fmt.Errorf("dumping files: %w", err)
 		}
@@ -58,7 +44,7 @@ type Options struct {
 	SkipBinary bool
 }
 
-func (g *Generator) generateOutlines(paths []traverse.PathInfo) (string, error) {
+func generateOutlines(paths []traverse.PathInfo, registry *parser.Registry) (string, error) {
 	output := "\n## Language-Specific Outlines\n\n"
 
 	var temp string
@@ -69,11 +55,11 @@ func (g *Generator) generateOutlines(paths []traverse.PathInfo) (string, error) 
 		}
 
 		// Skip if no parser available for this file type
-		if !g.registry.IsSupported(path.Path) {
+		if !registry.IsSupported(path.Path) {
 			continue
 		}
 
-		temp, err = g.processFileOutline(path.Path)
+		temp, err = processFileOutline(path.Path, registry)
 		if err != nil {
 			return "", fmt.Errorf("processing outline for %q: %w", path.Path, err)
 		}
@@ -82,13 +68,13 @@ func (g *Generator) generateOutlines(paths []traverse.PathInfo) (string, error) 
 	return output, nil
 }
 
-func (g *Generator) processFileOutline(filePath string) (string, error) {
+func processFileOutline(filePath string, registry *parser.Registry) (string, error) {
 	content, err := os.ReadFile(filePath)
 	if err != nil {
 		return "", err
 	}
 
-	parser := g.registry.GetParser(filePath)
+	parser := registry.GetParser(filePath)
 	if parser == nil {
 		return "", fmt.Errorf("no parser found for %q", filePath)
 	}
@@ -106,10 +92,10 @@ func (g *Generator) processFileOutline(filePath string) (string, error) {
 		return fmt.Sprintf("Parsing errors:\n%s\n", strings.Join(errMsgs, "\n")), nil
 	}
 
-	return g.writeSymbols(outline.Symbols, 0)
+	return writeSymbols(outline.Symbols, 0)
 }
 
-func (g *Generator) writeSymbols(symbols []*parser.Symbol, depth int) (string, error) {
+func writeSymbols(symbols []*parser.Symbol, depth int) (string, error) {
 	indent := strings.Repeat("  ", depth)
 	var output string
 	for _, symbol := range symbols {
@@ -136,7 +122,7 @@ func (g *Generator) writeSymbols(symbols []*parser.Symbol, depth int) (string, e
 
 		// Recursively write children
 		if len(symbol.Children) > 0 {
-			temp, err := g.writeSymbols(symbol.Children, depth+1)
+			temp, err := writeSymbols(symbol.Children, depth+1)
 			if err != nil {
 				return "", err
 			}
@@ -146,7 +132,7 @@ func (g *Generator) writeSymbols(symbols []*parser.Symbol, depth int) (string, e
 	return output, nil
 }
 
-func (g *Generator) dumpFiles(paths []traverse.PathInfo, skipBinary bool) (string, error) {
+func dumpFiles(paths []traverse.PathInfo, skipBinary bool) (string, error) {
 	var sb strings.Builder
 	sb.WriteString("\n## File Contents\n\n")
 
@@ -183,7 +169,7 @@ func (g *Generator) dumpFiles(paths []traverse.PathInfo, skipBinary bool) (strin
 	return sb.String(), nil
 }
 
-func (g *Generator) generateTree(paths []traverse.PathInfo) string {
+func generateTree(paths []traverse.PathInfo) string {
 	tree := utils.GenerateTree(paths)
 	return fmt.Sprintf("\n## File Tree\n\n%s\n", tree)
 }

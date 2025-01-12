@@ -101,8 +101,7 @@ func (c *RootCmd) Run() error {
 		SkipBinary: !c.IncludeBinary,
 	}
 
-	generator := output.NewGenerator(outputDest, registry)
-	output, err := generator.Generate(paths, outputOpts)
+	output, err := output.Generate(paths, registry, outputOpts)
 	if err != nil {
 		return fmt.Errorf("generating output: %w", err)
 	}
