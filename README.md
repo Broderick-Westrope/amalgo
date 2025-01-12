@@ -3,7 +3,7 @@
 [![Go Version](https://img.shields.io/badge/Go-1.23+-00ADD8?style=flat&logo=go)](https://go.dev/doc/install)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-Amalgo is a command-line tool that creates consolidated snapshots of source code for analysis, documentation, and sharing with [LLMs](https://en.wikipedia.org/wiki/Large_language_model). It helps developers gather and organize their codebase into a single, well-structured document.
+Amalgo is a command-line tool that creates consolidated snapshots (ie. an amalgamation) of source code for analysis, documentation, and sharing with [LLMs](https://en.wikipedia.org/wiki/Large_language_model). It helps developers gather and organize their codebase into a single, well-structured document.
 
 - [Features](#features)
 - [Installation](#installation)
