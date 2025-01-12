@@ -90,10 +90,8 @@ release:
   github:
     owner: Broderick-Westrope
     name: amalgo
-  draft: false
+  draft: true
   prerelease: auto
   mode: replace
   header: |
-    ## {{ .Tag }} ({{ .Date }})
-
-    Welcome to this new release!
+    *Generated using GoReleaser and automated using GitHub Actions.*
