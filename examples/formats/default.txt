@@ -1,0 +1,1205 @@
+## Generated with Amalgo at: 2025-01-12 20:48:13
+
+## File Tree
+
+├── go.mod
+├── go.sum
+├── internal/
+│   ├── output.go
+│   ├── output_json.go
+│   ├── parser/
+│   │   ├── golang.go
+│   │   └── parser.go
+│   ├── traverse.go
+│   └── utils.go
+└── main.go
+
+## File Contents
+
+--- File: go.mod
+module github.com/Broderick-Westrope/amalgo
+
+go 1.23.3
+
+require (
+	github.com/alecthomas/kong v1.6.1 // indirect
+	github.com/fatih/color v1.18.0 // indirect
+	github.com/gobwas/glob v0.2.3 // indirect
+	github.com/mattn/go-colorable v0.1.13 // indirect
+	github.com/mattn/go-isatty v0.0.20 // indirect
+	golang.org/x/sys v0.25.0 // indirect
+)
+
+
+--- File: go.sum
+github.com/alecthomas/kong v1.6.1 h1:/7bVimARU3uxPD0hbryPE8qWrS3Oz3kPQoxA/H2NKG8=
+github.com/alecthomas/kong v1.6.1/go.mod h1:p2vqieVMeTAnaC83txKtXe8FLke2X07aruPWXyMPQrU=
+github.com/fatih/color v1.18.0 h1:S8gINlzdQ840/4pfAwic/ZE0djQEH3wM94VfqLTZcOM=
+github.com/fatih/color v1.18.0/go.mod h1:4FelSpRwEGDpQ12mAdzqdOukCy4u8WUtOY6lkT/6HfU=
+github.com/gobwas/glob v0.2.3 h1:A4xDbljILXROh+kObIiy5kIaPYD8e96x1tgBhUI5J+Y=
+github.com/gobwas/glob v0.2.3/go.mod h1:d3Ez4x06l9bZtSvzIay5+Yzi0fmZzPgnTbPcKjJAkT8=
+github.com/mattn/go-colorable v0.1.13 h1:fFA4WZxdEF4tXPZVKMLwD8oUnCTTo08duU7wxecdEvA=
+github.com/mattn/go-colorable v0.1.13/go.mod h1:7S9/ev0klgBDR4GtXTXX8a3vIGJpMovkB8vQcUbaXHg=
+github.com/mattn/go-isatty v0.0.16/go.mod h1:kYGgaQfpe5nmfYZH+SKPsOc2e4SrIfOl2e/yFXSvRLM=
+github.com/mattn/go-isatty v0.0.20 h1:xfD0iDuEKnDkl03q4limB+vH+GxLEtL/jb4xVJSWWEY=
+github.com/mattn/go-isatty v0.0.20/go.mod h1:W+V8PltTTMOvKvAeJH7IuucS94S2C6jfK/D7dTCTo3Y=
+golang.org/x/sys v0.0.0-20220811171246-fbc7d0a398ab/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
+golang.org/x/sys v0.6.0/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
+golang.org/x/sys v0.25.0 h1:r+8e+loiHxRqhXVl6ML1nO3l1+oFoWbnlu2Ehimmi34=
+golang.org/x/sys v0.25.0/go.mod h1:/VUhepiaJMQUp4+oa/7Zr1D23ma6VTLIYjOOTFZPUcA=
+
+
+--- File: internal/output.go
+package internal
+
+import (
+	"fmt"
+	"os"
+	"strings"
+
+	"github.com/Broderick-Westrope/amalgo/internal/parser"
+)
+
+type OutputFormat string
+
+const (
+	OutputFormatDefault = "default"
+	OutputFormatJSON    = "json"
+)
+
+// Options configures the output generation
+type OutputOptions struct {
+	NoTree     bool
+	NoDump     bool
+	Outline    bool
+	SkipBinary bool
+	Format     OutputFormat
+}
+
+// GenerateOutput creates the complete output string
+func GenerateOutput(paths []PathInfo, registry *parser.Registry, opts OutputOptions) (string, error) {
+	if opts.Format == OutputFormatJSON {
+		return generateOutputJSON(paths, registry, opts)
+	}
+
+	output := fmt.Sprintf("## Generated with Amalgo at: %s\n\n", FormatTimestamp())
+
+	if !opts.NoTree {
+		output += generateTree(paths)
+	}
+
+	if opts.Outline {
+		outlines, err := generateOutlines(paths, registry)
+		if err != nil {
+			return "", fmt.Errorf("generating outlines: %w", err)
+		}
+		output += outlines
+	}
+
+	if !opts.NoDump {
+		filesDump, err := dumpFiles(paths, opts.SkipBinary)
+		if err != nil {
+			return "", fmt.Errorf("dumping files: %w", err)
+		}
+		output += filesDump
+	}
+	return output, nil
+}
+
+func generateOutlines(paths []PathInfo, registry *parser.Registry) (string, error) {
+	output := "## Language-Specific Outlines\n\n"
+
+	var temp string
+	var err error
+	for _, path := range paths {
+		if path.IsDir {
+			continue
+		}
+
+		// Skip if no parser available for this file type
+		if !registry.IsSupported(path.Path) {
+			continue
+		}
+
+		temp, err = processFileOutline(path.Path, registry)
+		if err != nil {
+			return "", fmt.Errorf("processing outline for %q: %w", path.Path, err)
+		}
+		output += fmt.Sprintf("\n### File: %s\n%s", path.RelativePath, temp)
+	}
+	return output, nil
+}
+
+func processFileOutline(filePath string, registry *parser.Registry) (string, error) {
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		return "", err
+	}
+
+	parser := registry.GetParser(filePath)
+	if parser == nil {
+		return "", fmt.Errorf("no parser found for %q", filePath)
+	}
+
+	outline, err := parser.Parse(content, filePath)
+	if err != nil {
+		return "", fmt.Errorf("parsing file %q: %w", filePath, err)
+	}
+
+	if len(outline.Errors) > 0 {
+		var errMsgs []string
+		for _, err := range outline.Errors {
+			errMsgs = append(errMsgs, err.Error())
+		}
+		return fmt.Sprintf("Parsing errors:\n%s\n", strings.Join(errMsgs, "\n")), nil
+	}
+
+	return writeSymbols(outline.Symbols, 0)
+}
+
+func writeSymbols(symbols []*parser.Symbol, depth int) (string, error) {
+	indent := strings.Repeat("  ", depth)
+	var output string
+	for _, symbol := range symbols {
+		// Write symbol header
+		output += fmt.Sprintf("%s%s: %s", indent, strings.ToUpper(symbol.Type), symbol.Name)
+		if symbol.Signature != "" {
+			output += fmt.Sprintf(" (%s)", symbol.Signature)
+		}
+		output += "\n"
+
+		// Write decorators if present
+		if len(symbol.Decorators) > 0 {
+			output += fmt.Sprintf("%s  Decorators: %s\n", indent, strings.Join(symbol.Decorators, ", "))
+		}
+
+		// Write docstring if present
+		if symbol.Docstring != "" {
+			docLines := strings.Split(strings.TrimSpace(symbol.Docstring), "\n")
+			output += fmt.Sprintf("%s  Documentation:\n", indent)
+			for _, line := range docLines {
+				output += fmt.Sprintf("%s    %s\n", indent, line)
+			}
+		}
+
+		// Recursively write children
+		if len(symbol.Children) > 0 {
+			temp, err := writeSymbols(symbol.Children, depth+1)
+			if err != nil {
+				return "", err
+			}
+			output += temp
+		}
+	}
+	return output, nil
+}
+
+func dumpFiles(paths []PathInfo, skipBinary bool) (string, error) {
+	var sb strings.Builder
+	sb.WriteString("## File Contents\n\n")
+
+	for _, path := range paths {
+		if path.IsDir {
+			continue
+		}
+
+		if skipBinary {
+			// Check if file is binary
+			isBinary, err := IsBinaryFile(path.Path)
+			if err != nil {
+				return "", fmt.Errorf("failed to check if file is binary: %w", err)
+			}
+
+			if isBinary {
+				sb.WriteString(
+					fmt.Sprintf("--- File: %s\n<binary file>\n\n", path.RelativePath),
+				)
+				continue
+			}
+		}
+
+		// Read and write file content
+		fileContent, err := os.ReadFile(path.Path)
+		if err != nil {
+			return "", fmt.Errorf("failed to read file %s: %w", path.Path, err)
+		}
+
+		sb.WriteString(
+			fmt.Sprintf("--- File: %s\n%s\n\n", path.RelativePath, string(fileContent)),
+		)
+	}
+	return sb.String(), nil
+}
+
+func generateTree(paths []PathInfo) string {
+	tree := GenerateTree(paths)
+	return fmt.Sprintf("## File Tree\n\n%s\n", tree)
+}
+
+
+--- File: internal/output_json.go
+package internal
+
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+
+	"github.com/Broderick-Westrope/amalgo/internal/parser"
+)
+
+type JSONDocument struct {
+	Timestamp string            `json:"timestamp"`
+	Tree      string            `json:"tree,omitempty"`
+	Files     []JSONFile        `json:"files,omitempty"`
+	Outlines  []JSONFileOutline `json:"outlines,omitempty"`
+}
+
+type JSONFile struct {
+	Path    string `json:"path"`
+	Content string `json:"content,omitempty"`
+	Binary  bool   `json:"binary,omitempty"`
+}
+
+// JSONFileOutline represents the parsed structure of a source file
+type JSONFileOutline struct {
+	Path    string       `json:"path"`
+	Symbols []JSONSymbol `json:"symbols,omitempty"`
+	Errors  []string     `json:"errors,omitempty"`
+}
+
+// JSONSymbol represents a parsed symbol (function, type, class, etc.)
+type JSONSymbol struct {
+	Type          string       `json:"type"`                    // e.g., "function", "class", "interface"
+	Name          string       `json:"name"`                    // Name of the symbol
+	Signature     string       `json:"signature,omitempty"`     // Full signature for functions/methods
+	Documentation string       `json:"documentation,omitempty"` // Associated documentation
+	Decorators    []string     `json:"decorators,omitempty"`    // Any decorators/annotations
+	Children      []JSONSymbol `json:"children,omitempty"`      // Nested symbols (e.g., methods in a class)
+	Metadata      any          `json:"metadata,omitempty"`      // Additional language-specific metadata
+}
+
+func generateOutputJSON(paths []PathInfo, registry *parser.Registry, opts OutputOptions) (string, error) {
+	doc := JSONDocument{
+		Timestamp: FormatTimestamp(),
+	}
+
+	if !opts.NoTree {
+		doc.Tree = GenerateTree(paths)
+	}
+
+	if !opts.NoDump {
+		files, err := generateFilesJSON(paths, opts.SkipBinary)
+		if err != nil {
+			return "", fmt.Errorf("dumping files: %w", err)
+		}
+		doc.Files = files
+	}
+
+	if opts.Outline {
+		outlines, err := generateOutlinesJSON(paths, registry)
+		if err != nil {
+			return "", fmt.Errorf("generating outlines: %w", err)
+		}
+		doc.Outlines = outlines
+	}
+
+	output, err := json.MarshalIndent(doc, "", "  ")
+	if err != nil {
+		return "", fmt.Errorf("marshaling JSON: %w", err)
+	}
+
+	return string(output), nil
+}
+
+func generateFilesJSON(paths []PathInfo, skipBinary bool) ([]JSONFile, error) {
+	files := make([]JSONFile, 0, len(paths))
+
+	for _, path := range paths {
+		if path.IsDir {
+			continue
+		}
+
+		if skipBinary {
+			isBinary, err := IsBinaryFile(path.Path)
+			if err != nil {
+				return nil, fmt.Errorf("checking if binary: %w", err)
+			}
+
+			if isBinary {
+				files = append(files, JSONFile{
+					Path:   path.RelativePath,
+					Binary: true,
+				})
+				continue
+			}
+		}
+
+		content, err := os.ReadFile(path.Path)
+		if err != nil {
+			return nil, fmt.Errorf("reading file %s: %w", path.Path, err)
+		}
+
+		files = append(files, JSONFile{
+			Path:    path.RelativePath,
+			Content: string(content),
+		})
+	}
+
+	return files, nil
+}
+
+func generateOutlinesJSON(paths []PathInfo, registry *parser.Registry) ([]JSONFileOutline, error) {
+	outlines := make([]JSONFileOutline, 0)
+
+	for _, path := range paths {
+		if path.IsDir || !registry.IsSupported(path.Path) {
+			continue
+		}
+
+		content, err := os.ReadFile(path.Path)
+		if err != nil {
+			return nil, fmt.Errorf("reading file %s: %w", path.Path, err)
+		}
+
+		parser := registry.GetParser(path.Path)
+		parsedOutline, err := parser.Parse(content, path.Path)
+		if err != nil {
+			return nil, fmt.Errorf("parsing file %s: %w", path.Path, err)
+		}
+
+		outline := JSONFileOutline{
+			Path:    path.RelativePath,
+			Symbols: make([]JSONSymbol, 0, len(parsedOutline.Symbols)),
+		}
+
+		// Convert parser.Symbols to our JSON Symbol type
+		for _, sym := range parsedOutline.Symbols {
+			symbol, err := convertSymbol(sym)
+			if err != nil {
+				return nil, fmt.Errorf("converting symbol in %s: %w", path.Path, err)
+			}
+			outline.Symbols = append(outline.Symbols, symbol)
+		}
+
+		// Add any parsing errors
+		if len(parsedOutline.Errors) > 0 {
+			outline.Errors = make([]string, len(parsedOutline.Errors))
+			for i, err := range parsedOutline.Errors {
+				outline.Errors[i] = err.Error()
+			}
+		}
+
+		outlines = append(outlines, outline)
+	}
+
+	return outlines, nil
+}
+
+func convertSymbol(ps *parser.Symbol) (JSONSymbol, error) {
+	children := make([]JSONSymbol, 0, len(ps.Children))
+	for _, child := range ps.Children {
+		converted, err := convertSymbol(child)
+		if err != nil {
+			return JSONSymbol{}, fmt.Errorf("converting child symbol: %w", err)
+		}
+		children = append(children, converted)
+	}
+
+	return JSONSymbol{
+		Type:          ps.Type,
+		Name:          ps.Name,
+		Signature:     ps.Signature,
+		Documentation: ps.Docstring,
+		Decorators:    ps.Decorators,
+		Children:      children,
+		Metadata:      ps.Metadata,
+	}, nil
+}
+
+
+--- File: internal/parser/golang.go
+package parser
+
+import (
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"strings"
+)
+
+// GoParser implements Parser for Go source files
+type GoParser struct{}
+
+// NewGoParser creates a new Go parser
+func NewGoParser() *GoParser {
+	return &GoParser{}
+}
+
+func (p *GoParser) Extensions() []string {
+	return []string{".go"}
+}
+
+func (p *GoParser) Parse(content []byte, filename string) (*FileOutline, error) {
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, filename, content, parser.ParseComments)
+	if err != nil {
+		return &FileOutline{
+			Filename: filename,
+			Errors:   []error{err},
+		}, nil
+	}
+
+	outline := &FileOutline{
+		Filename: filename,
+		Symbols:  make([]*Symbol, 0),
+	}
+
+	// Process package-level declarations
+	for _, decl := range file.Decls {
+		symbols := p.processDecl(decl, file)
+		outline.Symbols = append(outline.Symbols, symbols...)
+	}
+
+	return outline, nil
+}
+
+func (p *GoParser) processDecl(decl ast.Decl, file *ast.File) []*Symbol {
+	var symbols []*Symbol
+
+	switch d := decl.(type) {
+	case *ast.FuncDecl:
+		symbol := &Symbol{
+			Type:      "function",
+			Name:      d.Name.Name,
+			Signature: p.getFunctionSignature(d),
+			Docstring: p.getDocstring(d.Doc),
+		}
+
+		// Handle methods
+		if d.Recv != nil {
+			symbol.Type = "method"
+			if len(d.Recv.List) > 0 {
+				recvType := p.typeToString(d.Recv.List[0].Type)
+				symbol.Name = recvType + "." + d.Name.Name
+			}
+		}
+
+		symbols = append(symbols, symbol)
+
+	case *ast.GenDecl:
+		switch d.Tok {
+		case token.TYPE:
+			for _, spec := range d.Specs {
+				if typeSpec, ok := spec.(*ast.TypeSpec); ok {
+					symbol := &Symbol{
+						Type:      p.getTypeSymbolType(typeSpec),
+						Name:      typeSpec.Name.Name,
+						Docstring: p.getDocstring(d.Doc),
+					}
+
+					// Handle interface methods and struct fields
+					if symbol.Type == "interface" {
+						if iface, ok := typeSpec.Type.(*ast.InterfaceType); ok {
+							symbol.Children = p.processInterface(iface)
+						}
+					} else if symbol.Type == "struct" {
+						if structType, ok := typeSpec.Type.(*ast.StructType); ok {
+							symbol.Children = p.processStruct(structType)
+						}
+					}
+
+					symbols = append(symbols, symbol)
+				}
+			}
+
+		case token.CONST, token.VAR:
+			for _, spec := range d.Specs {
+				if valSpec, ok := spec.(*ast.ValueSpec); ok {
+					for _, name := range valSpec.Names {
+						symbol := &Symbol{
+							Type:      strings.ToLower(d.Tok.String()),
+							Name:      name.Name,
+							Docstring: p.getDocstring(d.Doc),
+						}
+						if valSpec.Type != nil {
+							symbol.Signature = p.typeToString(valSpec.Type)
+						}
+						symbols = append(symbols, symbol)
+					}
+				}
+			}
+		}
+	}
+
+	return symbols
+}
+
+func (p *GoParser) processInterface(iface *ast.InterfaceType) []*Symbol {
+	var methods []*Symbol
+	if iface.Methods == nil {
+		return methods
+	}
+
+	for _, method := range iface.Methods.List {
+		if len(method.Names) == 0 {
+			continue // Skip embedded interfaces
+		}
+
+		methodType, ok := method.Type.(*ast.FuncType)
+		if !ok {
+			continue
+		}
+
+		for _, name := range method.Names {
+			symbol := &Symbol{
+				Type:      "method",
+				Name:      name.Name,
+				Signature: p.getFuncTypeSignature(methodType),
+				Docstring: p.getDocstring(method.Doc),
+			}
+			methods = append(methods, symbol)
+		}
+	}
+
+	return methods
+}
+
+func (p *GoParser) processStruct(structType *ast.StructType) []*Symbol {
+	var fields []*Symbol
+	if structType.Fields == nil {
+		return fields
+	}
+
+	for _, field := range structType.Fields.List {
+		if len(field.Names) == 0 {
+			// Anonymous/embedded field
+			symbol := &Symbol{
+				Type:      "field",
+				Name:      p.typeToString(field.Type),
+				Signature: p.typeToString(field.Type),
+				Docstring: p.getDocstring(field.Doc),
+			}
+			fields = append(fields, symbol)
+			continue
+		}
+
+		for _, name := range field.Names {
+			symbol := &Symbol{
+				Type:      "field",
+				Name:      name.Name,
+				Signature: p.typeToString(field.Type),
+				Docstring: p.getDocstring(field.Doc),
+			}
+			fields = append(fields, symbol)
+		}
+	}
+
+	return fields
+}
+
+func (p *GoParser) getFunctionSignature(fn *ast.FuncDecl) string {
+	var builder strings.Builder
+	builder.WriteString("func ")
+
+	// Add receiver if it's a method
+	if fn.Recv != nil && len(fn.Recv.List) > 0 {
+		builder.WriteString("(")
+		if len(fn.Recv.List[0].Names) > 0 {
+			builder.WriteString(fn.Recv.List[0].Names[0].Name)
+			builder.WriteString(" ")
+		}
+		builder.WriteString(p.typeToString(fn.Recv.List[0].Type))
+		builder.WriteString(") ")
+	}
+
+	builder.WriteString(fn.Name.Name)
+	builder.WriteString(p.getFuncTypeSignature(fn.Type))
+	return builder.String()
+}
+
+func (p *GoParser) getFuncTypeSignature(ft *ast.FuncType) string {
+	var builder strings.Builder
+	builder.WriteString("(")
+
+	if ft.Params != nil {
+		for i, param := range ft.Params.List {
+			if i > 0 {
+				builder.WriteString(", ")
+			}
+			for j, name := range param.Names {
+				if j > 0 {
+					builder.WriteString(", ")
+				}
+				builder.WriteString(name.Name)
+			}
+			if len(param.Names) > 0 {
+				builder.WriteString(" ")
+			}
+			builder.WriteString(p.typeToString(param.Type))
+		}
+	}
+
+	builder.WriteString(")")
+
+	if ft.Results != nil {
+		if ft.Results.NumFields() == 1 && len(ft.Results.List[0].Names) == 0 {
+			builder.WriteString(" ")
+			builder.WriteString(p.typeToString(ft.Results.List[0].Type))
+		} else {
+			builder.WriteString(" (")
+			for i, result := range ft.Results.List {
+				if i > 0 {
+					builder.WriteString(", ")
+				}
+				for j, name := range result.Names {
+					if j > 0 {
+						builder.WriteString(", ")
+					}
+					builder.WriteString(name.Name)
+				}
+				if len(result.Names) > 0 {
+					builder.WriteString(" ")
+				}
+				builder.WriteString(p.typeToString(result.Type))
+			}
+			builder.WriteString(")")
+		}
+	}
+
+	return builder.String()
+}
+
+func (p *GoParser) typeToString(expr ast.Expr) string {
+	switch t := expr.(type) {
+	case *ast.Ident:
+		return t.Name
+	case *ast.SelectorExpr:
+		return p.typeToString(t.X) + "." + t.Sel.Name
+	case *ast.StarExpr:
+		return "*" + p.typeToString(t.X)
+	case *ast.ArrayType:
+		return "[]" + p.typeToString(t.Elt)
+	case *ast.MapType:
+		return "map[" + p.typeToString(t.Key) + "]" + p.typeToString(t.Value)
+	case *ast.InterfaceType:
+		return "interface{}"
+	case *ast.ChanType:
+		switch t.Dir {
+		case ast.SEND:
+			return "chan<- " + p.typeToString(t.Value)
+		case ast.RECV:
+			return "<-chan " + p.typeToString(t.Value)
+		default:
+			return "chan " + p.typeToString(t.Value)
+		}
+	case *ast.FuncType:
+		return "func" + p.getFuncTypeSignature(t)
+	case *ast.StructType:
+		return "struct{...}"
+	case *ast.Ellipsis:
+		return "..." + p.typeToString(t.Elt)
+	default:
+		return "<unknown>"
+	}
+}
+
+func (p *GoParser) getTypeSymbolType(typeSpec *ast.TypeSpec) string {
+	switch typeSpec.Type.(type) {
+	case *ast.InterfaceType:
+		return "interface"
+	case *ast.StructType:
+		return "struct"
+	default:
+		return "type"
+	}
+}
+
+func (p *GoParser) getDocstring(doc *ast.CommentGroup) string {
+	if doc == nil {
+		return ""
+	}
+	return doc.Text()
+}
+
+
+--- File: internal/parser/parser.go
+// Package parser provides language-specific parsing capabilities
+package parser
+
+import "path/filepath"
+
+// Parser defines the interface for language-specific parsers
+type Parser interface {
+	// Parse analyzes the content of a file and returns a structured outline
+	Parse(content []byte, filename string) (*FileOutline, error)
+
+	// Extensions returns the file extensions this parser handles
+	Extensions() []string
+}
+
+// Symbol represents a parsed symbol (function, type, class, etc.)
+type Symbol struct {
+	Type       string         // e.g., "function", "class", "interface", etc.
+	Name       string         // Name of the symbol
+	Signature  string         // Full signature for functions/methods
+	Docstring  string         // Associated documentation
+	Decorators []string       // Any decorators/annotations
+	Children   []*Symbol      // Nested symbols (e.g., methods in a class)
+	Metadata   map[string]any // Additional language-specific metadata
+}
+
+// FileOutline represents the parsed structure of a source file
+type FileOutline struct {
+	Filename string    // Name of the parsed file
+	Symbols  []*Symbol // Top-level symbols in the file
+	Errors   []error   // Any errors encountered during parsing
+}
+
+// Registry manages the available parsers
+type Registry struct {
+	parsers map[string]Parser
+}
+
+// NewRegistry creates a new parser registry
+func NewRegistry() *Registry {
+	return &Registry{
+		parsers: make(map[string]Parser),
+	}
+}
+
+// Register adds a parser to the registry
+func (r *Registry) Register(parser Parser) {
+	for _, ext := range parser.Extensions() {
+		r.parsers[ext] = parser
+	}
+}
+
+// GetParser returns the appropriate parser for a file extension
+func (r *Registry) GetParser(filename string) Parser {
+	ext := filepath.Ext(filename)
+	return r.parsers[ext]
+}
+
+// IsSupported checks if there's a parser available for the given file extension
+func (r *Registry) IsSupported(filename string) bool {
+	ext := filepath.Ext(filename)
+	_, ok := r.parsers[ext]
+	return ok
+}
+
+
+--- File: internal/traverse.go
+package internal
+
+import (
+	"fmt"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"strings"
+
+	"github.com/gobwas/glob"
+)
+
+// PathInfo represents information about a file or directory
+type PathInfo struct {
+	Path         string
+	RelativePath string
+	Depth        int
+	IsDir        bool
+}
+
+// TraverseDirectories traverses directories and collects path information
+func TraverseDirectories(directories []string, includePatterns []string, excludePatterns []string) ([]PathInfo, error) {
+	includeMatchers, err := createPatternMatchers(includePatterns)
+	if err != nil {
+		return nil, fmt.Errorf("creating include pattern matchers: %w", err)
+	}
+
+	excludeMatchers, err := createPatternMatchers(excludePatterns)
+	if err != nil {
+		return nil, fmt.Errorf("creating exclude pattern matchers: %w", err)
+	}
+
+	var paths []PathInfo
+	for _, dir := range directories {
+		basePath, err := filepath.Abs(dir)
+		if err != nil {
+			return nil, err
+		}
+
+		baseInfo, err := os.Stat(basePath)
+		if err != nil {
+			return nil, err
+		}
+
+		if !baseInfo.IsDir() {
+			basePath = filepath.Dir(basePath)
+			baseInfo, err = os.Stat(basePath)
+			if err != nil {
+				return nil, err
+			}
+			if !baseInfo.IsDir() {
+				return nil, fmt.Errorf("expected base path %q to be a directory", basePath)
+			}
+		}
+
+		// Add base directory if it matches patterns
+		baseRelPath := filepath.Base(basePath)
+		if shouldIncludePath(baseRelPath, true, includeMatchers, excludeMatchers) {
+			paths = append(paths, PathInfo{
+				Path:         basePath,
+				RelativePath: baseRelPath,
+				Depth:        1,
+				IsDir:        true,
+			})
+		}
+
+		// Walk the directory tree
+		err = filepath.WalkDir(basePath, func(path string, d fs.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+
+			// Skip the root directory as it's already processed
+			if path == basePath {
+				return nil
+			}
+
+			relPath, err := filepath.Rel(basePath, path)
+			if err != nil {
+				return err
+			}
+
+			// Convert to forward slashes for consistent pattern matching
+			relPath = filepath.ToSlash(relPath)
+			isDir := d.IsDir()
+
+			// Check if path should be included based on patterns
+			if !shouldIncludePath(relPath, isDir, includeMatchers, excludeMatchers) {
+				if isDir {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+
+			depth := strings.Count(relPath, "/") + 1
+
+			paths = append(paths, PathInfo{
+				Path:         path,
+				RelativePath: relPath,
+				Depth:        depth,
+				IsDir:        isDir,
+			})
+
+			return nil
+		})
+
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return paths, nil
+}
+
+// shouldIncludePath determines if a path should be included based on the patterns
+func shouldIncludePath(path string, isDir bool, includeMatchers, excludeMatchers []glob.Glob) bool {
+	// Append trailing slash for directories to match directory-specific patterns
+	if isDir {
+		path = path + "/"
+	}
+
+	for _, matcher := range excludeMatchers {
+		if matcher.Match(path) {
+			return false
+		}
+	}
+
+	for _, matcher := range includeMatchers {
+		if matcher.Match(path) {
+			return true
+		}
+	}
+	return false
+}
+
+func createPatternMatchers(patterns []string) ([]glob.Glob, error) {
+	matchers := make([]glob.Glob, len(patterns))
+	for i, pattern := range patterns {
+		g, err := glob.Compile(pattern)
+		if err != nil {
+			return nil, fmt.Errorf("invalid pattern '%s': %w", pattern, err)
+		}
+		matchers[i] = g
+	}
+	return matchers, nil
+}
+
+
+--- File: internal/utils.go
+package internal
+
+import (
+	"bytes"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+)
+
+// IsBinaryFile determines if a file is binary by checking its contents
+func IsBinaryFile(path string) (bool, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return false, err
+	}
+	defer file.Close()
+
+	// Read first 512 bytes
+	buf := make([]byte, 512)
+	n, err := file.Read(buf)
+	if err != nil && err != io.EOF {
+		return false, err
+	}
+	buf = buf[:n]
+
+	// Check for null bytes
+	if bytes.IndexByte(buf, 0) != -1 {
+		return true, nil
+	}
+
+	// Look for non-text characters
+	for _, b := range buf {
+		if b < 32 && b != 9 && b != 10 && b != 13 { // Not tab, LF, or CR
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
+// GenerateTree creates a textual representation of the directory structure
+func GenerateTree(paths []PathInfo) string {
+	mapPathToChildren := make(map[string][]PathInfo)
+	for _, path := range paths {
+		if path.Depth == 0 {
+			continue
+		}
+		parent := filepath.Dir(path.Path)
+		mapPathToChildren[parent] = append(mapPathToChildren[parent], path)
+	}
+
+	var sb strings.Builder
+	var printTree func(path PathInfo, prefix string, isLast bool)
+	printTree = func(path PathInfo, prefix string, isLast bool) {
+		// Print current item
+		connector := "├── "
+		if isLast {
+			connector = "└── "
+		}
+
+		name := filepath.Base(path.Path)
+		if path.IsDir {
+			name += "/"
+		}
+		sb.WriteString(fmt.Sprintf("%s%s%s\n", prefix, connector, name))
+
+		// Print children
+		childPrefix := prefix + "│   "
+		if isLast {
+			childPrefix = prefix + "    "
+		}
+
+		pathChildren := mapPathToChildren[path.Path]
+		for i, child := range pathChildren {
+			printTree(child, childPrefix, i == len(pathChildren)-1)
+		}
+	}
+
+	// Process root level items
+	rootPaths := mapPathToChildren[filepath.Dir(paths[0].Path)]
+	for i, path := range rootPaths {
+		printTree(path, "", i == len(rootPaths)-1)
+	}
+
+	return sb.String()
+}
+
+// WriteOutput writes content to a file or stdout
+func WriteOutput(path string, content string) error {
+	if path == "stdout" || path == "-" {
+		_, err := fmt.Print(content)
+		return err
+	}
+
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("failed to create directory: %w", err)
+	}
+
+	return os.WriteFile(path, []byte(content), 0644)
+}
+
+// FormatTimestamp returns a formatted timestamp string
+func FormatTimestamp() string {
+	return time.Now().Format("2006-01-02 15:04:05")
+}
+
+
+--- File: main.go
+package main
+
+import (
+	"fmt"
+	"strings"
+
+	"github.com/Broderick-Westrope/amalgo/internal"
+	"github.com/Broderick-Westrope/amalgo/internal/parser"
+	"github.com/alecthomas/kong"
+	"github.com/fatih/color"
+)
+
+const (
+	appName = "amalgo"
+	version = "0.2.0"
+)
+
+func main() {
+	cli := RootCmd{
+		Version: versionFlag(version),
+	}
+
+	ctx := kong.Parse(&cli,
+		kong.Name(appName),
+		kong.Description("Create consolidated snapshots of source code for analysis, documentation, and sharing with LLMs."),
+		kong.UsageOnError(),
+		kong.DefaultEnvars(appName),
+		kong.Vars{
+			"version": string(cli.Version),
+		})
+	err := ctx.Run()
+	ctx.FatalIfErrorf(err)
+}
+
+type RootCmd struct {
+	// Default command args and flags
+	Dirs          []string              `arg:"" optional:"" help:"Directories to analyze. If a file is provided it's parent directory will be used." type:"path" default:"."`
+	Output        string                `help:"Specifies the destination path for the output file. The file extension will automatically adjust based on the selected format (see '--format')." short:"o" type:"path" placeholder:"amalgo.txt"`
+	Stdout        bool                  `help:"Redirects all output to standard output (terminal) instead of writing to a file. Useful for piping output to other commands."`
+	Filter        []string              `help:"Controls which files are processed using glob patterns. Include patterns are processed first, then exclude patterns (prefixed with '!'). Hidden files and directories are excluded by default." short:"f" default:"*,!.*"`
+	NoTree        bool                  `help:"Skips the inclusion of the file tree in the output." default:"false"`
+	NoDump        bool                  `help:"Skips the inclusion of file contents in the output." default:"false"`
+	Outline       bool                  `help:"Includes in the output a language-aware outline of code files, showing functions, classes, and other significant elements. Only available for specific file extensions: '.go'." default:"false"`
+	NoColor       bool                  `help:"Disables ANSI color codes in the output." default:"false"`
+	IncludeBinary bool                  `help:"Processes binary files instead of skipping them. Use with caution as this may produce large or unreadable output." default:"false"`
+	Format        internal.OutputFormat `help:"Selects an alternative output format. This affects both the structure and the file extension of the output. Options: 'default', 'json'." enum:"default,json" default:"default"`
+
+	// Subcommands
+	Version versionFlag `help:"Displays the current version of the tool and exits immediately." short:"v" name:"version"`
+}
+
+func (c *RootCmd) validate() bool {
+	if c.Output == "" {
+		if c.Format == internal.OutputFormatJSON {
+			c.Output += "amalgo.json"
+		} else {
+			c.Output = "amalgo.txt"
+		}
+	}
+
+	issues := make([]string, 0)
+	if len(c.Dirs) == 0 {
+		issues = append(issues, "At least one input directory is required.")
+	}
+	if c.NoDump && c.NoTree && !c.Outline {
+		issues = append(issues, "An empty output is not allowed (no dump, no tree, and no outline).")
+	}
+
+	if len(issues) == 0 {
+		return true
+	}
+	out := strings.Join(issues, "\n")
+	if !c.NoColor {
+		out = color.RedString(out)
+	}
+	fmt.Println(out)
+	return false
+}
+
+func (c *RootCmd) Run() error {
+	if !c.validate() {
+		return nil
+	}
+
+	outputDest := c.Output
+	if c.Stdout {
+		outputDest = "stdout"
+	}
+
+	registry := parser.NewRegistry()
+	registry.Register(parser.NewGoParser())
+
+	includePatterns := make([]string, 0)
+	excludePatterns := make([]string, 0)
+	for _, original := range c.Filter {
+		new, found := strings.CutPrefix(original, "!")
+		if found {
+			excludePatterns = append(excludePatterns, new)
+		} else {
+			includePatterns = append(includePatterns, original)
+		}
+	}
+	if len(includePatterns) == 0 {
+		includePatterns = []string{"*"}
+	}
+
+	paths, err := internal.TraverseDirectories(c.Dirs, includePatterns, excludePatterns)
+	if err != nil {
+		return fmt.Errorf("traversing directories: %w", err)
+	}
+
+	outputOpts := internal.OutputOptions{
+		NoTree:     c.NoTree,
+		NoDump:     c.NoDump,
+		Outline:    c.Outline,
+		SkipBinary: !c.IncludeBinary,
+		Format:     c.Format,
+	}
+
+	output, err := internal.GenerateOutput(paths, registry, outputOpts)
+	if err != nil {
+		return fmt.Errorf("generating output: %w", err)
+	}
+
+	err = internal.WriteOutput(outputDest, output)
+	if err != nil {
+		return fmt.Errorf("writing output: %w", err)
+	}
+
+	// Print success message unless output is stdout.
+	if outputDest != "stdout" {
+		msg := fmt.Sprintf("Successfully generated output to: %s\n", outputDest)
+		if !c.NoColor {
+			msg = color.GreenString(msg)
+		}
+		fmt.Print(msg)
+	}
+
+	return nil
+}
+
+type versionFlag string
+
+func (v versionFlag) Decode(_ *kong.DecodeContext) error { return nil }
+func (v versionFlag) IsBool() bool                       { return true }
+func (v versionFlag) BeforeApply(app *kong.Kong, vars kong.Vars) error {
+	fmt.Println(vars["version"])
+	app.Exit(0)
+	return nil
+}
+
+
