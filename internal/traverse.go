@@ -36,7 +36,6 @@ func TraverseDirectories(directories []string, includePatterns []string, exclude
 		if err != nil {
 			return nil, err
 		}
-		basePath = filepath.Dir(basePath)
 
 		baseInfo, err := os.Stat(basePath)
 		if err != nil {
@@ -44,11 +43,18 @@ func TraverseDirectories(directories []string, includePatterns []string, exclude
 		}
 
 		if !baseInfo.IsDir() {
-			return nil, fmt.Errorf("expected base path %q to be a directory", basePath)
+			basePath = filepath.Dir(basePath)
+			baseInfo, err = os.Stat(basePath)
+			if err != nil {
+				return nil, err
+			}
+			if !baseInfo.IsDir() {
+				return nil, fmt.Errorf("expected base path %q to be a directory", basePath)
+			}
 		}
 
 		// Add base directory if it matches patterns
-		baseRelPath := filepath.ToSlash(filepath.Join(filepath.Base(basePath), filepath.Base(basePath)))
+		baseRelPath := filepath.Base(basePath)
 		if shouldIncludePath(baseRelPath, true, includeMatchers, excludeMatchers) {
 			paths = append(paths, PathInfo{
 				Path:         basePath,
