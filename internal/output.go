@@ -81,7 +81,7 @@ func generateOutlines(paths []PathInfo, registry *parser.Registry) (string, erro
 func processFileOutline(filePath string, registry *parser.Registry) (string, error) {
 	content, err := os.ReadFile(filePath)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("reading file: %w", err)
 	}
 
 	parser := registry.GetParser(filePath)
@@ -102,7 +102,11 @@ func processFileOutline(filePath string, registry *parser.Registry) (string, err
 		return fmt.Sprintf("Parsing errors:\n%s\n", strings.Join(errMsgs, "\n")), nil
 	}
 
-	return writeSymbols(outline.Symbols, 0)
+	result, err := writeSymbols(outline.Symbols, 0)
+	if err != nil {
+		return "", fmt.Errorf("writing symbols: %w", err)
+	}
+	return result, nil
 }
 
 func writeSymbols(symbols []*parser.Symbol, depth int) (string, error) {
@@ -155,7 +159,7 @@ func dumpFiles(paths []PathInfo, skipBinary bool) (string, error) {
 			// Check if file is binary
 			isBinary, err := IsBinaryFile(path.Path)
 			if err != nil {
-				return "", fmt.Errorf("failed to check if file is binary: %w", err)
+				return "", fmt.Errorf("checking if file %q is binary: %w", path.Path, err)
 			}
 
 			if isBinary {
@@ -169,7 +173,7 @@ func dumpFiles(paths []PathInfo, skipBinary bool) (string, error) {
 		// Read and write file content
 		fileContent, err := os.ReadFile(path.Path)
 		if err != nil {
-			return "", fmt.Errorf("failed to read file %s: %w", path.Path, err)
+			return "", fmt.Errorf("reading file %q: %w", path.Path, err)
 		}
 
 		sb.WriteString(

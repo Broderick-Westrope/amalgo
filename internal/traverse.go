@@ -62,12 +62,12 @@ func TraverseDirectories(directories []string, includePatterns []string, exclude
 	for _, dir := range directories {
 		basePath, err := filepath.Abs(dir)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("getting base path for directory %q: %w", dir, err)
 		}
 
 		baseInfo, err := os.Stat(basePath)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("describing base path for directory %q: %w", dir, err)
 		}
 
 		if !baseInfo.IsDir() {
@@ -96,7 +96,7 @@ func TraverseDirectories(directories []string, includePatterns []string, exclude
 		// Walk the directory tree
 		err = filepath.WalkDir(basePath, func(path string, d fs.DirEntry, err error) error {
 			if err != nil {
-				return err
+				return fmt.Errorf("at path %q: %w", path, err)
 			}
 
 			// Skip the root directory as it's already processed
@@ -106,7 +106,7 @@ func TraverseDirectories(directories []string, includePatterns []string, exclude
 
 			relPath, err := filepath.Rel(basePath, path)
 			if err != nil {
-				return err
+				return fmt.Errorf("getting relative path between %q and %q: %w", basePath, path, err)
 			}
 
 			// Convert to forward slashes for consistent pattern matching
@@ -146,7 +146,7 @@ func TraverseDirectories(directories []string, includePatterns []string, exclude
 			return nil
 		})
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("walking directory %q: %w", basePath, err)
 		}
 	}
 
@@ -247,7 +247,7 @@ func createPatternMatchers(patterns []string) ([]patternMatcher, error) {
 	for i, pattern := range patterns {
 		g, err := glob.Compile(pattern)
 		if err != nil {
-			return nil, fmt.Errorf("invalid pattern '%s': %w", pattern, err)
+			return nil, fmt.Errorf("compiling pattern %q: %w", pattern, err)
 		}
 		matchers[i] = patternMatcher{
 			pattern: pattern,

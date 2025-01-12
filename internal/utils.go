@@ -14,7 +14,7 @@ import (
 func IsBinaryFile(path string) (bool, error) {
 	file, err := os.Open(path)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("opening file: %w", err)
 	}
 	defer file.Close()
 
@@ -22,7 +22,7 @@ func IsBinaryFile(path string) (bool, error) {
 	buf := make([]byte, 512)
 	n, err := file.Read(buf)
 	if err != nil && err != io.EOF {
-		return false, err
+		return false, fmt.Errorf("reading file: %w", err)
 	}
 	buf = buf[:n]
 
@@ -37,7 +37,6 @@ func IsBinaryFile(path string) (bool, error) {
 			return true, nil
 		}
 	}
-
 	return false, nil
 }
 
@@ -96,15 +95,20 @@ func GenerateTree(paths []PathInfo) string {
 func WriteOutput(path string, content string) error {
 	if path == "stdout" || path == "-" {
 		_, err := fmt.Print(content)
-		return err
+		return fmt.Errorf("writing to stdout: %w", err)
 	}
 
 	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return fmt.Errorf("failed to create directory: %w", err)
+	err := os.MkdirAll(dir, 0755)
+	if err != nil {
+		return fmt.Errorf("creating directories along path %q: %w", dir, err)
 	}
 
-	return os.WriteFile(path, []byte(content), 0644)
+	err = os.WriteFile(path, []byte(content), 0644)
+	if err != nil {
+		return fmt.Errorf("writing to file: %w", err)
+	}
+	return nil
 }
 
 // FormatTimestamp returns a formatted timestamp string
