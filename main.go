@@ -37,27 +37,33 @@ func main() {
 
 type RootCmd struct {
 	// Default command args and flags
-	Dirs          []string `arg:"" optional:"" help:"Directories to analyze. If a file is provided the parent directory will be used." type:"path" default:"."`
-	Output        string   `help:"Output file path." short:"o" type:"path" default:"amalgo.txt"`
-	Stdout        bool     `help:"Write output to stdout instead of file."`
-	Filter        []string `help:"Glob patterns to filter by. Prefixing a pattern with '!' makes it an exclude pattern. The default patterns include everything except hidden files and folders. (e.g. '*.go,*.{js,ts}' OR '!.md')" short:"f" default:"*,!.*"`
-	NoTree        bool     `help:"Skip directory tree generation." default:"false"`
-	NoDump        bool     `help:"Skip file content dumping." default:"false"`
-	Outline       bool     `help:"Generate language-specific outlines." default:"false"`
-	NoColor       bool     `help:"Don't use color in the terminal output." default:"false"`
-	IncludeBinary bool     `help:"Include binary files." default:"false"`
+	Dirs          []string              `arg:"" optional:"" help:"Directories to analyze. If a file is provided the parent directory will be used." type:"path" default:"."`
+	Output        string                `help:"Output file path." short:"o" type:"path" placeholder:"amalgo.txt"`
+	Stdout        bool                  `help:"Write output to stdout instead of file."`
+	Filter        []string              `help:"Glob patterns to filter by. Prefixing a pattern with '!' makes it an exclude pattern. The default patterns include everything except hidden files and folders. (e.g. '*.go,*.{js,ts}' OR '!.md')" short:"f" default:"*,!.*"`
+	NoTree        bool                  `help:"Skip directory tree generation." default:"false"`
+	NoDump        bool                  `help:"Skip file content dumping." default:"false"`
+	Outline       bool                  `help:"Generate language-specific outlines." default:"false"`
+	NoColor       bool                  `help:"Don't use color in the terminal output." default:"false"`
+	IncludeBinary bool                  `help:"Include binary files." default:"false"`
+	Format        internal.OutputFormat `help:"Format the output using an alternate method. This will change the file extension of the default output file." enum:"default,json" default:"default"`
 
 	// Subcommands
 	Version versionFlag `help:"Print version information and quit" short:"v" name:"version"`
 }
 
 func (c *RootCmd) validate() bool {
+	if c.Output == "" {
+		if c.Format == internal.OutputFormatJSON {
+			c.Output += "amalgo.json"
+		} else {
+			c.Output = "amalgo.txt"
+		}
+	}
+
 	issues := make([]string, 0)
 	if len(c.Dirs) == 0 {
 		issues = append(issues, "At least one input directory is required.")
-	}
-	if c.Output == "" {
-		issues = append(issues, "Output cannot be empty.")
 	}
 	if c.NoDump && c.NoTree && !c.Outline {
 		issues = append(issues, "An empty output is not allowed (no dump, no tree, and no outline).")
@@ -111,6 +117,7 @@ func (c *RootCmd) Run() error {
 		NoDump:     c.NoDump,
 		Outline:    c.Outline,
 		SkipBinary: !c.IncludeBinary,
+		Format:     c.Format,
 	}
 
 	output, err := internal.GenerateOutput(paths, registry, outputOpts)

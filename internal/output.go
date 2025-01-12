@@ -8,16 +8,28 @@ import (
 	"github.com/Broderick-Westrope/amalgo/internal/parser"
 )
 
+type OutputFormat string
+
+const (
+	OutputFormatDefault = "default"
+	OutputFormatJSON    = "json"
+)
+
 // Options configures the output generation
 type OutputOptions struct {
 	NoTree     bool
 	NoDump     bool
 	Outline    bool
 	SkipBinary bool
+	Format     OutputFormat
 }
 
 // GenerateOutput creates the complete output string
 func GenerateOutput(paths []PathInfo, registry *parser.Registry, opts OutputOptions) (string, error) {
+	if opts.Format == OutputFormatJSON {
+		return generateOutputJSON(paths, registry, opts)
+	}
+
 	output := fmt.Sprintf("## Generated with Amalgo at: %s\n\n", FormatTimestamp())
 
 	if !opts.NoTree {
