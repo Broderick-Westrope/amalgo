@@ -114,20 +114,32 @@ func TraverseDirectories(directories []string, includePatterns []string, exclude
 
 // shouldIncludePath determines if a path should be included based on the patterns
 func shouldIncludePath(path string, isDir bool, includeMatchers, excludeMatchers []glob.Glob) bool {
+	paths := []string{path}
+
+	// If the path doesn't contain a directory separator, also try matching it
+	// with an implicit ./ prefix to handle root-level files with **/ patterns
+	if !strings.Contains(path, "/") {
+		paths = append(paths, "./"+path)
+	}
+
 	// Append trailing slash for directories to match directory-specific patterns
 	if isDir {
-		path = path + "/"
+		path += "/"
 	}
 
 	for _, matcher := range excludeMatchers {
-		if matcher.Match(path) {
-			return false
+		for _, p := range paths {
+			if matcher.Match(p) {
+				return false
+			}
 		}
 	}
 
 	for _, matcher := range includeMatchers {
-		if matcher.Match(path) {
-			return true
+		for _, p := range paths {
+			if matcher.Match(p) {
+				return true
+			}
 		}
 	}
 	return false
