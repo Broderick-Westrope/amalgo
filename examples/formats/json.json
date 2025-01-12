@@ -1,42 +1,818 @@
 {
-    "timestamp": "2025-01-12 20:48:47",
-    "tree": "├── go.mod\n├── go.sum\n├── internal/\n│   ├── output.go\n│   ├── output_json.go\n│   ├── parser/\n│   │   ├── golang.go\n│   │   └── parser.go\n│   ├── traverse.go\n│   └── utils.go\n└── main.go\n",
-    "files": [
+  "timestamp": "2025-01-12 23:05:56",
+  "tree": "└── amalgo/\n    ├── main.go\n    └── internal/\n        ├── output.go\n        ├── output_json.go\n        ├── traverse.go\n        ├── traverse_test.go\n        ├── utils.go\n        └── parser/\n            ├── golang.go\n            └── parser.go\n",
+  "files": [
+    {
+      "path": "internal/output.go",
+      "content": "package internal\n\nimport (\n\t\"fmt\"\n\t\"os\"\n\t\"strings\"\n\n\t\"github.com/Broderick-Westrope/amalgo/internal/parser\"\n)\n\ntype OutputFormat string\n\nconst (\n\tOutputFormatDefault = \"default\"\n\tOutputFormatJSON    = \"json\"\n)\n\n// Options configures the output generation\ntype OutputOptions struct {\n\tNoTree     bool\n\tNoDump     bool\n\tOutline    bool\n\tSkipBinary bool\n\tFormat     OutputFormat\n}\n\n// GenerateOutput creates the complete output string\nfunc GenerateOutput(paths []PathInfo, registry *parser.Registry, opts OutputOptions) (string, error) {\n\tif opts.Format == OutputFormatJSON {\n\t\treturn generateOutputJSON(paths, registry, opts)\n\t}\n\n\toutput := fmt.Sprintf(\"## Generated with Amalgo at: %s\\n\\n\", FormatTimestamp())\n\n\tif !opts.NoTree {\n\t\toutput += fmt.Sprintf(\"## File Tree\\n\\n%s\\n\", GenerateTree(paths))\n\t}\n\n\tif opts.Outline {\n\t\toutlines, err := generateOutlines(paths, registry)\n\t\tif err != nil {\n\t\t\treturn \"\", fmt.Errorf(\"generating outlines: %w\", err)\n\t\t}\n\t\toutput += outlines\n\t}\n\n\tif !opts.NoDump {\n\t\tfilesDump, err := dumpFiles(paths, opts.SkipBinary)\n\t\tif err != nil {\n\t\t\treturn \"\", fmt.Errorf(\"dumping files: %w\", err)\n\t\t}\n\t\toutput += filesDump\n\t}\n\treturn output, nil\n}\n\nfunc generateOutlines(paths []PathInfo, registry *parser.Registry) (string, error) {\n\toutput := \"## Language-Specific Outlines\\n\\n\"\n\n\tvar temp string\n\tvar err error\n\tfor _, path := range paths {\n\t\tif path.IsDir {\n\t\t\tcontinue\n\t\t}\n\n\t\t// Skip if no parser available for this file type\n\t\tif !registry.IsSupported(path.Path) {\n\t\t\tcontinue\n\t\t}\n\n\t\ttemp, err = processFileOutline(path.Path, registry)\n\t\tif err != nil {\n\t\t\treturn \"\", fmt.Errorf(\"processing outline for %q: %w\", path.Path, err)\n\t\t}\n\t\toutput += fmt.Sprintf(\"\\n### File: %s\\n%s\", path.RelativePath, temp)\n\t}\n\treturn output, nil\n}\n\nfunc processFileOutline(filePath string, registry *parser.Registry) (string, error) {\n\tcontent, err := os.ReadFile(filePath)\n\tif err != nil {\n\t\treturn \"\", err\n\t}\n\n\tparser := registry.GetParser(filePath)\n\tif parser == nil {\n\t\treturn \"\", fmt.Errorf(\"no parser found for %q\", filePath)\n\t}\n\n\toutline, err := parser.Parse(content, filePath)\n\tif err != nil {\n\t\treturn \"\", fmt.Errorf(\"parsing file %q: %w\", filePath, err)\n\t}\n\n\tif len(outline.Errors) \u003e 0 {\n\t\tvar errMsgs []string\n\t\tfor _, err := range outline.Errors {\n\t\t\terrMsgs = append(errMsgs, err.Error())\n\t\t}\n\t\treturn fmt.Sprintf(\"Parsing errors:\\n%s\\n\", strings.Join(errMsgs, \"\\n\")), nil\n\t}\n\n\treturn writeSymbols(outline.Symbols, 0)\n}\n\nfunc writeSymbols(symbols []*parser.Symbol, depth int) (string, error) {\n\tindent := strings.Repeat(\"  \", depth)\n\tvar output string\n\tfor _, symbol := range symbols {\n\t\t// Write symbol header\n\t\toutput += fmt.Sprintf(\"%s%s: %s\", indent, strings.ToUpper(symbol.Type), symbol.Name)\n\t\tif symbol.Signature != \"\" {\n\t\t\toutput += fmt.Sprintf(\" (%s)\", symbol.Signature)\n\t\t}\n\t\toutput += \"\\n\"\n\n\t\t// Write decorators if present\n\t\tif len(symbol.Decorators) \u003e 0 {\n\t\t\toutput += fmt.Sprintf(\"%s  Decorators: %s\\n\", indent, strings.Join(symbol.Decorators, \", \"))\n\t\t}\n\n\t\t// Write docstring if present\n\t\tif symbol.Docstring != \"\" {\n\t\t\tdocLines := strings.Split(strings.TrimSpace(symbol.Docstring), \"\\n\")\n\t\t\toutput += fmt.Sprintf(\"%s  Documentation:\\n\", indent)\n\t\t\tfor _, line := range docLines {\n\t\t\t\toutput += fmt.Sprintf(\"%s    %s\\n\", indent, line)\n\t\t\t}\n\t\t}\n\n\t\t// Recursively write children\n\t\tif len(symbol.Children) \u003e 0 {\n\t\t\ttemp, err := writeSymbols(symbol.Children, depth+1)\n\t\t\tif err != nil {\n\t\t\t\treturn \"\", err\n\t\t\t}\n\t\t\toutput += temp\n\t\t}\n\t}\n\treturn output, nil\n}\n\nfunc dumpFiles(paths []PathInfo, skipBinary bool) (string, error) {\n\tvar sb strings.Builder\n\tsb.WriteString(\"## File Contents\\n\\n\")\n\n\tfor _, path := range paths {\n\t\tif path.IsDir {\n\t\t\tcontinue\n\t\t}\n\n\t\tif skipBinary {\n\t\t\t// Check if file is binary\n\t\t\tisBinary, err := IsBinaryFile(path.Path)\n\t\t\tif err != nil {\n\t\t\t\treturn \"\", fmt.Errorf(\"failed to check if file is binary: %w\", err)\n\t\t\t}\n\n\t\t\tif isBinary {\n\t\t\t\tsb.WriteString(\n\t\t\t\t\tfmt.Sprintf(\"--- File: %s\\n\u003cbinary file\u003e\\n\\n\", path.RelativePath),\n\t\t\t\t)\n\t\t\t\tcontinue\n\t\t\t}\n\t\t}\n\n\t\t// Read and write file content\n\t\tfileContent, err := os.ReadFile(path.Path)\n\t\tif err != nil {\n\t\t\treturn \"\", fmt.Errorf(\"failed to read file %s: %w\", path.Path, err)\n\t\t}\n\n\t\tsb.WriteString(\n\t\t\tfmt.Sprintf(\"--- File: %s\\n%s\\n\\n\", path.RelativePath, string(fileContent)),\n\t\t)\n\t}\n\treturn sb.String(), nil\n}\n"
+    },
+    {
+      "path": "internal/output_json.go",
+      "content": "package internal\n\nimport (\n\t\"encoding/json\"\n\t\"fmt\"\n\t\"os\"\n\n\t\"github.com/Broderick-Westrope/amalgo/internal/parser\"\n)\n\ntype JSONDocument struct {\n\tTimestamp string            `json:\"timestamp\"`\n\tTree      string            `json:\"tree,omitempty\"`\n\tFiles     []JSONFile        `json:\"files,omitempty\"`\n\tOutlines  []JSONFileOutline `json:\"outlines,omitempty\"`\n}\n\ntype JSONFile struct {\n\tPath    string `json:\"path\"`\n\tContent string `json:\"content,omitempty\"`\n\tBinary  bool   `json:\"binary,omitempty\"`\n}\n\n// JSONFileOutline represents the parsed structure of a source file\ntype JSONFileOutline struct {\n\tPath    string       `json:\"path\"`\n\tSymbols []JSONSymbol `json:\"symbols,omitempty\"`\n\tErrors  []string     `json:\"errors,omitempty\"`\n}\n\n// JSONSymbol represents a parsed symbol (function, type, class, etc.)\ntype JSONSymbol struct {\n\tType          string       `json:\"type\"`                    // e.g., \"function\", \"class\", \"interface\"\n\tName          string       `json:\"name\"`                    // Name of the symbol\n\tSignature     string       `json:\"signature,omitempty\"`     // Full signature for functions/methods\n\tDocumentation string       `json:\"documentation,omitempty\"` // Associated documentation\n\tDecorators    []string     `json:\"decorators,omitempty\"`    // Any decorators/annotations\n\tChildren      []JSONSymbol `json:\"children,omitempty\"`      // Nested symbols (e.g., methods in a class)\n\tMetadata      any          `json:\"metadata,omitempty\"`      // Additional language-specific metadata\n}\n\nfunc generateOutputJSON(paths []PathInfo, registry *parser.Registry, opts OutputOptions) (string, error) {\n\tdoc := JSONDocument{\n\t\tTimestamp: FormatTimestamp(),\n\t}\n\n\tif !opts.NoTree {\n\t\tdoc.Tree = GenerateTree(paths)\n\t}\n\n\tif !opts.NoDump {\n\t\tfiles, err := generateFilesJSON(paths, opts.SkipBinary)\n\t\tif err != nil {\n\t\t\treturn \"\", fmt.Errorf(\"dumping files: %w\", err)\n\t\t}\n\t\tdoc.Files = files\n\t}\n\n\tif opts.Outline {\n\t\toutlines, err := generateOutlinesJSON(paths, registry)\n\t\tif err != nil {\n\t\t\treturn \"\", fmt.Errorf(\"generating outlines: %w\", err)\n\t\t}\n\t\tdoc.Outlines = outlines\n\t}\n\n\toutput, err := json.MarshalIndent(doc, \"\", \"  \")\n\tif err != nil {\n\t\treturn \"\", fmt.Errorf(\"marshaling JSON: %w\", err)\n\t}\n\n\treturn string(output), nil\n}\n\nfunc generateFilesJSON(paths []PathInfo, skipBinary bool) ([]JSONFile, error) {\n\tfiles := make([]JSONFile, 0, len(paths))\n\n\tfor _, path := range paths {\n\t\tif path.IsDir {\n\t\t\tcontinue\n\t\t}\n\n\t\tif skipBinary {\n\t\t\tisBinary, err := IsBinaryFile(path.Path)\n\t\t\tif err != nil {\n\t\t\t\treturn nil, fmt.Errorf(\"checking if binary: %w\", err)\n\t\t\t}\n\n\t\t\tif isBinary {\n\t\t\t\tfiles = append(files, JSONFile{\n\t\t\t\t\tPath:   path.RelativePath,\n\t\t\t\t\tBinary: true,\n\t\t\t\t})\n\t\t\t\tcontinue\n\t\t\t}\n\t\t}\n\n\t\tcontent, err := os.ReadFile(path.Path)\n\t\tif err != nil {\n\t\t\treturn nil, fmt.Errorf(\"reading file %s: %w\", path.Path, err)\n\t\t}\n\n\t\tfiles = append(files, JSONFile{\n\t\t\tPath:    path.RelativePath,\n\t\t\tContent: string(content),\n\t\t})\n\t}\n\n\treturn files, nil\n}\n\nfunc generateOutlinesJSON(paths []PathInfo, registry *parser.Registry) ([]JSONFileOutline, error) {\n\toutlines := make([]JSONFileOutline, 0)\n\n\tfor _, path := range paths {\n\t\tif path.IsDir || !registry.IsSupported(path.Path) {\n\t\t\tcontinue\n\t\t}\n\n\t\tcontent, err := os.ReadFile(path.Path)\n\t\tif err != nil {\n\t\t\treturn nil, fmt.Errorf(\"reading file %s: %w\", path.Path, err)\n\t\t}\n\n\t\tparser := registry.GetParser(path.Path)\n\t\tparsedOutline, err := parser.Parse(content, path.Path)\n\t\tif err != nil {\n\t\t\treturn nil, fmt.Errorf(\"parsing file %s: %w\", path.Path, err)\n\t\t}\n\n\t\toutline := JSONFileOutline{\n\t\t\tPath:    path.RelativePath,\n\t\t\tSymbols: make([]JSONSymbol, 0, len(parsedOutline.Symbols)),\n\t\t}\n\n\t\t// Convert parser.Symbols to our JSON Symbol type\n\t\tfor _, sym := range parsedOutline.Symbols {\n\t\t\tsymbol, err := convertSymbol(sym)\n\t\t\tif err != nil {\n\t\t\t\treturn nil, fmt.Errorf(\"converting symbol in %s: %w\", path.Path, err)\n\t\t\t}\n\t\t\toutline.Symbols = append(outline.Symbols, symbol)\n\t\t}\n\n\t\t// Add any parsing errors\n\t\tif len(parsedOutline.Errors) \u003e 0 {\n\t\t\toutline.Errors = make([]string, len(parsedOutline.Errors))\n\t\t\tfor i, err := range parsedOutline.Errors {\n\t\t\t\toutline.Errors[i] = err.Error()\n\t\t\t}\n\t\t}\n\n\t\toutlines = append(outlines, outline)\n\t}\n\n\treturn outlines, nil\n}\n\nfunc convertSymbol(ps *parser.Symbol) (JSONSymbol, error) {\n\tchildren := make([]JSONSymbol, 0, len(ps.Children))\n\tfor _, child := range ps.Children {\n\t\tconverted, err := convertSymbol(child)\n\t\tif err != nil {\n\t\t\treturn JSONSymbol{}, fmt.Errorf(\"converting child symbol: %w\", err)\n\t\t}\n\t\tchildren = append(children, converted)\n\t}\n\n\treturn JSONSymbol{\n\t\tType:          ps.Type,\n\t\tName:          ps.Name,\n\t\tSignature:     ps.Signature,\n\t\tDocumentation: ps.Docstring,\n\t\tDecorators:    ps.Decorators,\n\t\tChildren:      children,\n\t\tMetadata:      ps.Metadata,\n\t}, nil\n}\n"
+    },
+    {
+      "path": "internal/parser/golang.go",
+      "content": "package parser\n\nimport (\n\t\"go/ast\"\n\t\"go/parser\"\n\t\"go/token\"\n\t\"strings\"\n)\n\n// GoParser implements Parser for Go source files\ntype GoParser struct{}\n\n// NewGoParser creates a new Go parser\nfunc NewGoParser() *GoParser {\n\treturn \u0026GoParser{}\n}\n\nfunc (p *GoParser) Extensions() []string {\n\treturn []string{\".go\"}\n}\n\nfunc (p *GoParser) Parse(content []byte, filename string) (*FileOutline, error) {\n\tfset := token.NewFileSet()\n\tfile, err := parser.ParseFile(fset, filename, content, parser.ParseComments)\n\tif err != nil {\n\t\treturn \u0026FileOutline{\n\t\t\tFilename: filename,\n\t\t\tErrors:   []error{err},\n\t\t}, nil\n\t}\n\n\toutline := \u0026FileOutline{\n\t\tFilename: filename,\n\t\tSymbols:  make([]*Symbol, 0),\n\t}\n\n\t// Process package-level declarations\n\tfor _, decl := range file.Decls {\n\t\tsymbols := p.processDecl(decl, file)\n\t\toutline.Symbols = append(outline.Symbols, symbols...)\n\t}\n\n\treturn outline, nil\n}\n\nfunc (p *GoParser) processDecl(decl ast.Decl, file *ast.File) []*Symbol {\n\tvar symbols []*Symbol\n\n\tswitch d := decl.(type) {\n\tcase *ast.FuncDecl:\n\t\tsymbol := \u0026Symbol{\n\t\t\tType:      \"function\",\n\t\t\tName:      d.Name.Name,\n\t\t\tSignature: p.getFunctionSignature(d),\n\t\t\tDocstring: p.getDocstring(d.Doc),\n\t\t}\n\n\t\t// Handle methods\n\t\tif d.Recv != nil {\n\t\t\tsymbol.Type = \"method\"\n\t\t\tif len(d.Recv.List) \u003e 0 {\n\t\t\t\trecvType := p.typeToString(d.Recv.List[0].Type)\n\t\t\t\tsymbol.Name = recvType + \".\" + d.Name.Name\n\t\t\t}\n\t\t}\n\n\t\tsymbols = append(symbols, symbol)\n\n\tcase *ast.GenDecl:\n\t\tswitch d.Tok {\n\t\tcase token.TYPE:\n\t\t\tfor _, spec := range d.Specs {\n\t\t\t\tif typeSpec, ok := spec.(*ast.TypeSpec); ok {\n\t\t\t\t\tsymbol := \u0026Symbol{\n\t\t\t\t\t\tType:      p.getTypeSymbolType(typeSpec),\n\t\t\t\t\t\tName:      typeSpec.Name.Name,\n\t\t\t\t\t\tDocstring: p.getDocstring(d.Doc),\n\t\t\t\t\t}\n\n\t\t\t\t\t// Handle interface methods and struct fields\n\t\t\t\t\tif symbol.Type == \"interface\" {\n\t\t\t\t\t\tif iface, ok := typeSpec.Type.(*ast.InterfaceType); ok {\n\t\t\t\t\t\t\tsymbol.Children = p.processInterface(iface)\n\t\t\t\t\t\t}\n\t\t\t\t\t} else if symbol.Type == \"struct\" {\n\t\t\t\t\t\tif structType, ok := typeSpec.Type.(*ast.StructType); ok {\n\t\t\t\t\t\t\tsymbol.Children = p.processStruct(structType)\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\n\t\t\t\t\tsymbols = append(symbols, symbol)\n\t\t\t\t}\n\t\t\t}\n\n\t\tcase token.CONST, token.VAR:\n\t\t\tfor _, spec := range d.Specs {\n\t\t\t\tif valSpec, ok := spec.(*ast.ValueSpec); ok {\n\t\t\t\t\tfor _, name := range valSpec.Names {\n\t\t\t\t\t\tsymbol := \u0026Symbol{\n\t\t\t\t\t\t\tType:      strings.ToLower(d.Tok.String()),\n\t\t\t\t\t\t\tName:      name.Name,\n\t\t\t\t\t\t\tDocstring: p.getDocstring(d.Doc),\n\t\t\t\t\t\t}\n\t\t\t\t\t\tif valSpec.Type != nil {\n\t\t\t\t\t\t\tsymbol.Signature = p.typeToString(valSpec.Type)\n\t\t\t\t\t\t}\n\t\t\t\t\t\tsymbols = append(symbols, symbol)\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t}\n\n\treturn symbols\n}\n\nfunc (p *GoParser) processInterface(iface *ast.InterfaceType) []*Symbol {\n\tvar methods []*Symbol\n\tif iface.Methods == nil {\n\t\treturn methods\n\t}\n\n\tfor _, method := range iface.Methods.List {\n\t\tif len(method.Names) == 0 {\n\t\t\tcontinue // Skip embedded interfaces\n\t\t}\n\n\t\tmethodType, ok := method.Type.(*ast.FuncType)\n\t\tif !ok {\n\t\t\tcontinue\n\t\t}\n\n\t\tfor _, name := range method.Names {\n\t\t\tsymbol := \u0026Symbol{\n\t\t\t\tType:      \"method\",\n\t\t\t\tName:      name.Name,\n\t\t\t\tSignature: p.getFuncTypeSignature(methodType),\n\t\t\t\tDocstring: p.getDocstring(method.Doc),\n\t\t\t}\n\t\t\tmethods = append(methods, symbol)\n\t\t}\n\t}\n\n\treturn methods\n}\n\nfunc (p *GoParser) processStruct(structType *ast.StructType) []*Symbol {\n\tvar fields []*Symbol\n\tif structType.Fields == nil {\n\t\treturn fields\n\t}\n\n\tfor _, field := range structType.Fields.List {\n\t\tif len(field.Names) == 0 {\n\t\t\t// Anonymous/embedded field\n\t\t\tsymbol := \u0026Symbol{\n\t\t\t\tType:      \"field\",\n\t\t\t\tName:      p.typeToString(field.Type),\n\t\t\t\tSignature: p.typeToString(field.Type),\n\t\t\t\tDocstring: p.getDocstring(field.Doc),\n\t\t\t}\n\t\t\tfields = append(fields, symbol)\n\t\t\tcontinue\n\t\t}\n\n\t\tfor _, name := range field.Names {\n\t\t\tsymbol := \u0026Symbol{\n\t\t\t\tType:      \"field\",\n\t\t\t\tName:      name.Name,\n\t\t\t\tSignature: p.typeToString(field.Type),\n\t\t\t\tDocstring: p.getDocstring(field.Doc),\n\t\t\t}\n\t\t\tfields = append(fields, symbol)\n\t\t}\n\t}\n\n\treturn fields\n}\n\nfunc (p *GoParser) getFunctionSignature(fn *ast.FuncDecl) string {\n\tvar builder strings.Builder\n\tbuilder.WriteString(\"func \")\n\n\t// Add receiver if it's a method\n\tif fn.Recv != nil \u0026\u0026 len(fn.Recv.List) \u003e 0 {\n\t\tbuilder.WriteString(\"(\")\n\t\tif len(fn.Recv.List[0].Names) \u003e 0 {\n\t\t\tbuilder.WriteString(fn.Recv.List[0].Names[0].Name)\n\t\t\tbuilder.WriteString(\" \")\n\t\t}\n\t\tbuilder.WriteString(p.typeToString(fn.Recv.List[0].Type))\n\t\tbuilder.WriteString(\") \")\n\t}\n\n\tbuilder.WriteString(fn.Name.Name)\n\tbuilder.WriteString(p.getFuncTypeSignature(fn.Type))\n\treturn builder.String()\n}\n\nfunc (p *GoParser) getFuncTypeSignature(ft *ast.FuncType) string {\n\tvar builder strings.Builder\n\tbuilder.WriteString(\"(\")\n\n\tif ft.Params != nil {\n\t\tfor i, param := range ft.Params.List {\n\t\t\tif i \u003e 0 {\n\t\t\t\tbuilder.WriteString(\", \")\n\t\t\t}\n\t\t\tfor j, name := range param.Names {\n\t\t\t\tif j \u003e 0 {\n\t\t\t\t\tbuilder.WriteString(\", \")\n\t\t\t\t}\n\t\t\t\tbuilder.WriteString(name.Name)\n\t\t\t}\n\t\t\tif len(param.Names) \u003e 0 {\n\t\t\t\tbuilder.WriteString(\" \")\n\t\t\t}\n\t\t\tbuilder.WriteString(p.typeToString(param.Type))\n\t\t}\n\t}\n\n\tbuilder.WriteString(\")\")\n\n\tif ft.Results != nil {\n\t\tif ft.Results.NumFields() == 1 \u0026\u0026 len(ft.Results.List[0].Names) == 0 {\n\t\t\tbuilder.WriteString(\" \")\n\t\t\tbuilder.WriteString(p.typeToString(ft.Results.List[0].Type))\n\t\t} else {\n\t\t\tbuilder.WriteString(\" (\")\n\t\t\tfor i, result := range ft.Results.List {\n\t\t\t\tif i \u003e 0 {\n\t\t\t\t\tbuilder.WriteString(\", \")\n\t\t\t\t}\n\t\t\t\tfor j, name := range result.Names {\n\t\t\t\t\tif j \u003e 0 {\n\t\t\t\t\t\tbuilder.WriteString(\", \")\n\t\t\t\t\t}\n\t\t\t\t\tbuilder.WriteString(name.Name)\n\t\t\t\t}\n\t\t\t\tif len(result.Names) \u003e 0 {\n\t\t\t\t\tbuilder.WriteString(\" \")\n\t\t\t\t}\n\t\t\t\tbuilder.WriteString(p.typeToString(result.Type))\n\t\t\t}\n\t\t\tbuilder.WriteString(\")\")\n\t\t}\n\t}\n\n\treturn builder.String()\n}\n\nfunc (p *GoParser) typeToString(expr ast.Expr) string {\n\tswitch t := expr.(type) {\n\tcase *ast.Ident:\n\t\treturn t.Name\n\tcase *ast.SelectorExpr:\n\t\treturn p.typeToString(t.X) + \".\" + t.Sel.Name\n\tcase *ast.StarExpr:\n\t\treturn \"*\" + p.typeToString(t.X)\n\tcase *ast.ArrayType:\n\t\treturn \"[]\" + p.typeToString(t.Elt)\n\tcase *ast.MapType:\n\t\treturn \"map[\" + p.typeToString(t.Key) + \"]\" + p.typeToString(t.Value)\n\tcase *ast.InterfaceType:\n\t\treturn \"interface{}\"\n\tcase *ast.ChanType:\n\t\tswitch t.Dir {\n\t\tcase ast.SEND:\n\t\t\treturn \"chan\u003c- \" + p.typeToString(t.Value)\n\t\tcase ast.RECV:\n\t\t\treturn \"\u003c-chan \" + p.typeToString(t.Value)\n\t\tdefault:\n\t\t\treturn \"chan \" + p.typeToString(t.Value)\n\t\t}\n\tcase *ast.FuncType:\n\t\treturn \"func\" + p.getFuncTypeSignature(t)\n\tcase *ast.StructType:\n\t\treturn \"struct{...}\"\n\tcase *ast.Ellipsis:\n\t\treturn \"...\" + p.typeToString(t.Elt)\n\tdefault:\n\t\treturn \"\u003cunknown\u003e\"\n\t}\n}\n\nfunc (p *GoParser) getTypeSymbolType(typeSpec *ast.TypeSpec) string {\n\tswitch typeSpec.Type.(type) {\n\tcase *ast.InterfaceType:\n\t\treturn \"interface\"\n\tcase *ast.StructType:\n\t\treturn \"struct\"\n\tdefault:\n\t\treturn \"type\"\n\t}\n}\n\nfunc (p *GoParser) getDocstring(doc *ast.CommentGroup) string {\n\tif doc == nil {\n\t\treturn \"\"\n\t}\n\treturn doc.Text()\n}\n"
+    },
+    {
+      "path": "internal/parser/parser.go",
+      "content": "// Package parser provides language-specific parsing capabilities\npackage parser\n\nimport \"path/filepath\"\n\n// Parser defines the interface for language-specific parsers\ntype Parser interface {\n\t// Parse analyzes the content of a file and returns a structured outline\n\tParse(content []byte, filename string) (*FileOutline, error)\n\n\t// Extensions returns the file extensions this parser handles\n\tExtensions() []string\n}\n\n// Symbol represents a parsed symbol (function, type, class, etc.)\ntype Symbol struct {\n\tType       string         // e.g., \"function\", \"class\", \"interface\", etc.\n\tName       string         // Name of the symbol\n\tSignature  string         // Full signature for functions/methods\n\tDocstring  string         // Associated documentation\n\tDecorators []string       // Any decorators/annotations\n\tChildren   []*Symbol      // Nested symbols (e.g., methods in a class)\n\tMetadata   map[string]any // Additional language-specific metadata\n}\n\n// FileOutline represents the parsed structure of a source file\ntype FileOutline struct {\n\tFilename string    // Name of the parsed file\n\tSymbols  []*Symbol // Top-level symbols in the file\n\tErrors   []error   // Any errors encountered during parsing\n}\n\n// Registry manages the available parsers\ntype Registry struct {\n\tparsers map[string]Parser\n}\n\n// NewRegistry creates a new parser registry\nfunc NewRegistry() *Registry {\n\treturn \u0026Registry{\n\t\tparsers: make(map[string]Parser),\n\t}\n}\n\n// Register adds a parser to the registry\nfunc (r *Registry) Register(parser Parser) {\n\tfor _, ext := range parser.Extensions() {\n\t\tr.parsers[ext] = parser\n\t}\n}\n\n// GetParser returns the appropriate parser for a file extension\nfunc (r *Registry) GetParser(filename string) Parser {\n\text := filepath.Ext(filename)\n\treturn r.parsers[ext]\n}\n\n// IsSupported checks if there's a parser available for the given file extension\nfunc (r *Registry) IsSupported(filename string) bool {\n\text := filepath.Ext(filename)\n\t_, ok := r.parsers[ext]\n\treturn ok\n}\n"
+    },
+    {
+      "path": "internal/traverse.go",
+      "content": "package internal\n\nimport (\n\t\"fmt\"\n\t\"io/fs\"\n\t\"os\"\n\t\"path/filepath\"\n\t\"strings\"\n\n\t\"github.com/gobwas/glob\"\n)\n\n// PathInfo represents information about a file or directory\ntype PathInfo struct {\n\tPath         string\n\tRelativePath string\n\tDepth        int\n\tIsDir        bool\n\n\t// matchReason tracks why this path was included\n\tmatchReason matchReason\n}\n\ntype matchReason int\n\nconst (\n\tnoMatch         matchReason = iota\n\tdirectMatch                 // Path matches pattern directly\n\tpotentialParent             // Directory that might contain matches\n)\n\n// patternMatcher pairs a glob matcher with its original pattern string\ntype patternMatcher struct {\n\tpattern string\n\tmatcher glob.Glob\n}\n\nfunc (pm *patternMatcher) Match(value string) bool {\n\treturn pm.matcher.Match(value)\n}\n\nfunc (pm *patternMatcher) String() string {\n\treturn pm.pattern\n}\n\n// TraverseDirectories traverses directories and collects path information\nfunc TraverseDirectories(directories []string, includePatterns []string, excludePatterns []string) ([]PathInfo, error) {\n\tincludeMatchers, err := createPatternMatchers(includePatterns)\n\tif err != nil {\n\t\treturn nil, fmt.Errorf(\"creating include pattern matchers: %w\", err)\n\t}\n\n\texcludeMatchers, err := createPatternMatchers(excludePatterns)\n\tif err != nil {\n\t\treturn nil, fmt.Errorf(\"creating exclude pattern matchers: %w\", err)\n\t}\n\n\tvar confirmedPaths []PathInfo\n\tvar potentialPaths []PathInfo\n\tdirectoryHasMatches := make(map[string]struct{})\n\n\tfor _, dir := range directories {\n\t\tbasePath, err := filepath.Abs(dir)\n\t\tif err != nil {\n\t\t\treturn nil, err\n\t\t}\n\n\t\tbaseInfo, err := os.Stat(basePath)\n\t\tif err != nil {\n\t\t\treturn nil, err\n\t\t}\n\n\t\tif !baseInfo.IsDir() {\n\t\t\tbasePath = filepath.Dir(basePath)\n\t\t\tbaseInfo, err = os.Stat(basePath)\n\t\t\tif err != nil {\n\t\t\t\treturn nil, err\n\t\t\t}\n\t\t\tif !baseInfo.IsDir() {\n\t\t\t\treturn nil, fmt.Errorf(\"expected base path %q to be a directory\", basePath)\n\t\t\t}\n\t\t}\n\n\t\t// Add base directory if it matches patterns\n\t\tbaseRelPath := filepath.Base(basePath)\n\t\tif include, reason := shouldIncludePath(baseRelPath, true, includeMatchers, excludeMatchers); include {\n\t\t\tconfirmedPaths = append(confirmedPaths, PathInfo{\n\t\t\t\tPath:         basePath,\n\t\t\t\tRelativePath: baseRelPath,\n\t\t\t\tDepth:        1,\n\t\t\t\tIsDir:        true,\n\t\t\t\tmatchReason:  reason,\n\t\t\t})\n\t\t}\n\n\t\t// Walk the directory tree\n\t\terr = filepath.WalkDir(basePath, func(path string, d fs.DirEntry, err error) error {\n\t\t\tif err != nil {\n\t\t\t\treturn err\n\t\t\t}\n\n\t\t\t// Skip the root directory as it's already processed\n\t\t\tif path == basePath {\n\t\t\t\treturn nil\n\t\t\t}\n\n\t\t\trelPath, err := filepath.Rel(basePath, path)\n\t\t\tif err != nil {\n\t\t\t\treturn err\n\t\t\t}\n\n\t\t\t// Convert to forward slashes for consistent pattern matching\n\t\t\trelPath = filepath.ToSlash(relPath)\n\t\t\tisDir := d.IsDir()\n\n\t\t\t// Check if path should be included based on patterns\n\t\t\tinclude, reason := shouldIncludePath(relPath, isDir, includeMatchers, excludeMatchers)\n\t\t\tif !include {\n\t\t\t\tif isDir {\n\t\t\t\t\treturn filepath.SkipDir\n\t\t\t\t}\n\t\t\t\treturn nil\n\t\t\t}\n\n\t\t\tdepth := strings.Count(relPath, \"/\") + 1\n\t\t\tinfo := PathInfo{\n\t\t\t\tPath:         path,\n\t\t\t\tRelativePath: relPath,\n\t\t\t\tDepth:        depth,\n\t\t\t\tIsDir:        isDir,\n\t\t\t\tmatchReason:  reason,\n\t\t\t}\n\n\t\t\tif !isDir || reason == directMatch {\n\t\t\t\tconfirmedPaths = append(confirmedPaths, info)\n\n\t\t\t\tdir := filepath.Dir(info.RelativePath)\n\t\t\t\tfor dir != \".\" \u0026\u0026 dir != \"/\" {\n\t\t\t\t\tdirectoryHasMatches[dir] = struct{}{}\n\t\t\t\t\tdir = filepath.Dir(dir)\n\t\t\t\t}\n\t\t\t\tdirectoryHasMatches[\".\"] = struct{}{}\n\t\t\t} else {\n\t\t\t\tpotentialPaths = append(potentialPaths, info)\n\t\t\t}\n\t\t\treturn nil\n\t\t})\n\t\tif err != nil {\n\t\t\treturn nil, err\n\t\t}\n\t}\n\n\tif len(confirmedPaths) \u003e 0 {\n\t\t// Add directories that contain matches\n\t\tfor _, p := range potentialPaths {\n\t\t\tif p.IsDir \u0026\u0026 p.matchReason == potentialParent {\n\t\t\t\tif _, found := directoryHasMatches[p.RelativePath]; found {\n\t\t\t\t\tconfirmedPaths = append(confirmedPaths, p)\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t}\n\treturn confirmedPaths, nil\n}\n\n// shouldIncludePath determines if a path should be included based on the patterns\nfunc shouldIncludePath(path string, isDir bool, includeMatchers, excludeMatchers []patternMatcher) (bool, matchReason) {\n\t// Append trailing slash for directories to match directory-specific patterns\n\tif isDir {\n\t\tpath += \"/\"\n\t}\n\tpaths := []string{path}\n\n\t// If the path doesn't contain a directory separator, also try matching it\n\t// with an implicit ./ prefix to handle root-level files with **/ patterns\n\tif !strings.Contains(path, \"/\") {\n\t\tpaths = append(paths, \"./\"+path)\n\t}\n\n\tfor _, matcher := range excludeMatchers {\n\t\tfor _, p := range paths {\n\t\t\tif matcher.Match(p) {\n\t\t\t\treturn false, noMatch\n\t\t\t}\n\t\t}\n\t}\n\n\tfor _, matcher := range includeMatchers {\n\t\tfor _, p := range paths {\n\t\t\tif matcher.Match(p) {\n\t\t\t\treturn true, directMatch\n\t\t\t}\n\t\t}\n\t}\n\n\t// Even if directory doesn't match directly, check if it could contain matching files\n\tisMatch := isDir \u0026\u0026 couldContainMatches(path, includeMatchers)\n\tif isMatch {\n\t\treturn isMatch, potentialParent\n\t}\n\treturn false, noMatch\n}\n\n// couldContainMatches checks if a directory could potentially contain files that match the patterns\nfunc couldContainMatches(dirPath string, includeMatchers []patternMatcher) bool {\n\tdirPath = strings.TrimSuffix(dirPath, \"/\")\n\n\t// If the directory path itself matches any pattern, it could contain matches\n\tfor _, matcher := range includeMatchers {\n\t\tpattern := matcher.String()\n\n\t\t// If pattern is just checking file extension or name (no directories),\n\t\t// then any directory could contain matching files\n\t\tif !strings.Contains(pattern, \"/\") {\n\t\t\treturn true\n\t\t}\n\n\t\t// If pattern uses **, any directory could contain matches\n\t\tif strings.Contains(pattern, \"**\") {\n\t\t\treturn true\n\t\t}\n\n\t\t// For patterns with explicit directory structure, check if this directory\n\t\t// is a potential parent of matching files\n\t\tparts := strings.Split(pattern, \"/\")\n\t\tdirParts := strings.Split(dirPath, \"/\")\n\n\t\t// If directory path is shorter than pattern, it could contain matches\n\t\tif len(dirParts) \u003c len(parts) {\n\t\t\tprefixMatches := true\n\t\t\tfor i := range dirParts {\n\t\t\t\tif parts[i] != dirParts[i] \u0026\u0026 parts[i] != \"*\" {\n\t\t\t\t\tprefixMatches = false\n\t\t\t\t\tbreak\n\t\t\t\t}\n\t\t\t}\n\t\t\tif prefixMatches {\n\t\t\t\treturn true\n\t\t\t}\n\t\t}\n\t}\n\treturn false\n}\n\nfunc createPatternMatchers(patterns []string) ([]patternMatcher, error) {\n\tmatchers := make([]patternMatcher, len(patterns))\n\tfor i, pattern := range patterns {\n\t\tg, err := glob.Compile(pattern)\n\t\tif err != nil {\n\t\t\treturn nil, fmt.Errorf(\"invalid pattern '%s': %w\", pattern, err)\n\t\t}\n\t\tmatchers[i] = patternMatcher{\n\t\t\tpattern: pattern,\n\t\t\tmatcher: g,\n\t\t}\n\t}\n\treturn matchers, nil\n}\n"
+    },
+    {
+      "path": "internal/traverse_test.go",
+      "content": "package internal\n\nimport (\n\t\"strings\"\n\t\"testing\"\n\n\t\"github.com/stretchr/testify/assert\"\n\t\"github.com/stretchr/testify/require\"\n)\n\nfunc TestShouldIncludePath(t *testing.T) {\n\ttests := map[string]struct {\n\t\tpath           string\n\t\tisDir          bool\n\t\tincludePattern string\n\t\texcludePattern string\n\t\twantInclude    bool\n\t\twantReason     matchReason\n\t}{\n\t\t// Original test cases\n\t\t\"root go file with no patterns\": {\n\t\t\tpath:           \"main.go\",\n\t\t\tisDir:          false,\n\t\t\tincludePattern: \"\",\n\t\t\texcludePattern: \"\",\n\t\t\twantInclude:    false,\n\t\t\twantReason:     noMatch,\n\t\t},\n\t\t\"nested go file with no patterns\": {\n\t\t\tpath:           \"internal/parser/parser.go\",\n\t\t\tisDir:          false,\n\t\t\tincludePattern: \"\",\n\t\t\texcludePattern: \"\",\n\t\t\twantInclude:    false,\n\t\t\twantReason:     noMatch,\n\t\t},\n\t\t\"root go file with simple pattern\": {\n\t\t\tpath:           \"main.go\",\n\t\t\tisDir:          false,\n\t\t\tincludePattern: \"*.go\",\n\t\t\texcludePattern: \"\",\n\t\t\twantInclude:    true,\n\t\t\twantReason:     directMatch,\n\t\t},\n\t\t\"nested go file with simple pattern\": {\n\t\t\tpath:           \"internal/parser/parser.go\",\n\t\t\tisDir:          false,\n\t\t\tincludePattern: \"*.go\",\n\t\t\texcludePattern: \"\",\n\t\t\twantInclude:    true,\n\t\t\twantReason:     directMatch,\n\t\t},\n\t\t\"root go file with double-star pattern\": {\n\t\t\tpath:           \"main.go\",\n\t\t\tisDir:          false,\n\t\t\tincludePattern: \"**/*.go\",\n\t\t\texcludePattern: \"\",\n\t\t\twantInclude:    true,\n\t\t\twantReason:     directMatch,\n\t\t},\n\t\t\"nested go file with double-star pattern\": {\n\t\t\tpath:           \"internal/parser/parser.go\",\n\t\t\tisDir:          false,\n\t\t\tincludePattern: \"**/*.go\",\n\t\t\texcludePattern: \"\",\n\t\t\twantInclude:    true,\n\t\t\twantReason:     directMatch,\n\t\t},\n\n\t\t// New test cases for directory handling\n\t\t\"directory with potential go files\": {\n\t\t\tpath:           \"src\",\n\t\t\tisDir:          true,\n\t\t\tincludePattern: \"**/*.go\",\n\t\t\texcludePattern: \"\",\n\t\t\twantInclude:    true,\n\t\t\twantReason:     potentialParent,\n\t\t},\n\t\t\"nested directory with potential go files\": {\n\t\t\tpath:           \"src/utils\",\n\t\t\tisDir:          true,\n\t\t\tincludePattern: \"**/*.go\",\n\t\t\texcludePattern: \"\",\n\t\t\twantInclude:    true,\n\t\t\twantReason:     potentialParent,\n\t\t},\n\t\t\"excluded directory\": {\n\t\t\tpath:           \"vendor\",\n\t\t\tisDir:          true,\n\t\t\tincludePattern: \"**/*.go\",\n\t\t\texcludePattern: \"vendor/**\",\n\t\t\twantInclude:    false,\n\t\t\twantReason:     noMatch,\n\t\t},\n\t\t\"nested excluded directory\": {\n\t\t\tpath:           \"vendor/pkg\",\n\t\t\tisDir:          true,\n\t\t\tincludePattern: \"**/*.go\",\n\t\t\texcludePattern: \"vendor/**\",\n\t\t\twantInclude:    false,\n\t\t\twantReason:     noMatch,\n\t\t},\n\t\t\"file in excluded directory\": {\n\t\t\tpath:           \"vendor/pkg/main.go\",\n\t\t\tisDir:          false,\n\t\t\tincludePattern: \"**/*.go\",\n\t\t\texcludePattern: \"vendor/**\",\n\t\t\twantInclude:    false,\n\t\t\twantReason:     noMatch,\n\t\t},\n\n\t\t// Tests for specific directory patterns\n\t\t\"directory matching specific pattern\": {\n\t\t\tpath:           \"internal\",\n\t\t\tisDir:          true,\n\t\t\tincludePattern: \"internal/*.go\",\n\t\t\texcludePattern: \"\",\n\t\t\twantInclude:    true,\n\t\t\twantReason:     potentialParent,\n\t\t},\n\t\t\"non-matching directory with specific pattern\": {\n\t\t\tpath:           \"pkg\",\n\t\t\tisDir:          true,\n\t\t\tincludePattern: \"internal/*.go\",\n\t\t\texcludePattern: \"\",\n\t\t\twantInclude:    false,\n\t\t\twantReason:     noMatch,\n\t\t},\n\n\t\t// Tests for multiple patterns\n\t\t\"file matching one of multiple patterns\": {\n\t\t\tpath:           \"main.go\",\n\t\t\tisDir:          false,\n\t\t\tincludePattern: \"*.txt,*.go\",\n\t\t\texcludePattern: \"\",\n\t\t\twantInclude:    true,\n\t\t\twantReason:     directMatch,\n\t\t},\n\t\t\"file not matching any of multiple patterns\": {\n\t\t\tpath:           \"main.rs\",\n\t\t\tisDir:          false,\n\t\t\tincludePattern: \"*.txt,*.go\",\n\t\t\texcludePattern: \"\",\n\t\t\twantInclude:    false,\n\t\t\twantReason:     noMatch,\n\t\t},\n\n\t\t// Edge cases\n\t\t\"root directory with double-star\": {\n\t\t\tpath:           \".\",\n\t\t\tisDir:          true,\n\t\t\tincludePattern: \"**/*.go\",\n\t\t\texcludePattern: \"\",\n\t\t\twantInclude:    true,\n\t\t\twantReason:     potentialParent,\n\t\t},\n\t\t\"empty path\": {\n\t\t\tpath:           \"\",\n\t\t\tisDir:          true,\n\t\t\tincludePattern: \"**/*.go\",\n\t\t\texcludePattern: \"\",\n\t\t\twantInclude:    true,\n\t\t\twantReason:     potentialParent,\n\t\t},\n\t\t\"path with special characters\": {\n\t\t\tpath:           \"test[1].go\",\n\t\t\tisDir:          false,\n\t\t\tincludePattern: \"*.go\",\n\t\t\texcludePattern: \"\",\n\t\t\twantInclude:    true,\n\t\t\twantReason:     directMatch,\n\t\t},\n\t}\n\n\tfor name, tt := range tests {\n\t\tt.Run(name, func(t *testing.T) {\n\t\t\tvar includeMatchers []patternMatcher\n\t\t\tvar excludeMatchers []patternMatcher\n\t\t\tvar err error\n\n\t\t\tif tt.includePattern != \"\" {\n\t\t\t\tincludeMatchers, err = createPatternMatchers(strings.Split(tt.includePattern, \",\"))\n\t\t\t\trequire.NoError(t, err)\n\t\t\t}\n\t\t\tif tt.excludePattern != \"\" {\n\t\t\t\texcludeMatchers, err = createPatternMatchers(strings.Split(tt.excludePattern, \",\"))\n\t\t\t\trequire.NoError(t, err)\n\t\t\t}\n\n\t\t\tgotInclude, gotReason := shouldIncludePath(tt.path, tt.isDir, includeMatchers, excludeMatchers)\n\t\t\tassert.Equal(t, tt.wantInclude, gotInclude, \"path: %s, include: %s, exclude: %s\",\n\t\t\t\ttt.path, tt.includePattern, tt.excludePattern)\n\t\t\tassert.Equal(t, tt.wantReason, gotReason, \"path: %s, include: %s, exclude: %s\",\n\t\t\t\ttt.path, tt.includePattern, tt.excludePattern)\n\t\t})\n\t}\n}\n\nfunc TestCouldContainMatches(t *testing.T) {\n\ttests := map[string]struct {\n\t\tdirPath string\n\t\tpattern string\n\t\twant    bool\n\t}{\n\t\t\"simple top-level pattern\": {\n\t\t\tdirPath: \"internal\",\n\t\t\tpattern: \"internal/*.go\",\n\t\t\twant:    true,\n\t\t},\n\t\t\"nested directory pattern\": {\n\t\t\tdirPath: \"src/internal\",\n\t\t\tpattern: \"src/internal/*.go\",\n\t\t\twant:    true,\n\t\t},\n\t\t\"non-matching directory\": {\n\t\t\tdirPath: \"src/other\",\n\t\t\tpattern: \"src/internal/*.go\",\n\t\t\twant:    false,\n\t\t},\n\t\t\"wildcard in directory\": {\n\t\t\tdirPath: \"src/v1/internal\",\n\t\t\tpattern: \"src/*/internal/*.go\",\n\t\t\twant:    true,\n\t\t},\n\t\t\"partial directory match\": {\n\t\t\tdirPath: \"src\",\n\t\t\tpattern: \"src/internal/*.go\",\n\t\t\twant:    true,\n\t\t},\n\t\t\"exact file pattern\": {\n\t\t\tdirPath: \"src\",\n\t\t\tpattern: \"src/main.go\",\n\t\t\twant:    true,\n\t\t},\n\t\t\"deep directory structure\": {\n\t\t\tdirPath: \"src/v1/internal/pkg\",\n\t\t\tpattern: \"src/**/internal/**/*.go\",\n\t\t\twant:    true,\n\t\t},\n\t}\n\n\tfor name, tt := range tests {\n\t\tt.Run(name, func(t *testing.T) {\n\t\t\tmatchers, err := createPatternMatchers([]string{tt.pattern})\n\t\t\trequire.NoError(t, err)\n\n\t\t\tgot := couldContainMatches(tt.dirPath, matchers)\n\t\t\tassert.Equal(t, tt.want, got,\n\t\t\t\t\"directory: %s, pattern: %s\", tt.dirPath, tt.pattern)\n\t\t})\n\t}\n}\n"
+    },
+    {
+      "path": "internal/utils.go",
+      "content": "package internal\n\nimport (\n\t\"bytes\"\n\t\"fmt\"\n\t\"io\"\n\t\"os\"\n\t\"path/filepath\"\n\t\"strings\"\n\t\"time\"\n)\n\n// IsBinaryFile determines if a file is binary by checking its contents\nfunc IsBinaryFile(path string) (bool, error) {\n\tfile, err := os.Open(path)\n\tif err != nil {\n\t\treturn false, err\n\t}\n\tdefer file.Close()\n\n\t// Read first 512 bytes\n\tbuf := make([]byte, 512)\n\tn, err := file.Read(buf)\n\tif err != nil \u0026\u0026 err != io.EOF {\n\t\treturn false, err\n\t}\n\tbuf = buf[:n]\n\n\t// Check for null bytes\n\tif bytes.IndexByte(buf, 0) != -1 {\n\t\treturn true, nil\n\t}\n\n\t// Look for non-text characters\n\tfor _, b := range buf {\n\t\tif b \u003c 32 \u0026\u0026 b != 9 \u0026\u0026 b != 10 \u0026\u0026 b != 13 { // Not tab, LF, or CR\n\t\t\treturn true, nil\n\t\t}\n\t}\n\n\treturn false, nil\n}\n\n// GenerateTree creates a textual representation of the directory structure\nfunc GenerateTree(paths []PathInfo) string {\n\tif len(paths) == 0 {\n\t\treturn \"\u003c no paths found \u003e\\n\"\n\t}\n\n\tmapPathToChildren := make(map[string][]PathInfo)\n\tfor _, path := range paths {\n\t\tif path.Depth == 0 {\n\t\t\tcontinue\n\t\t}\n\t\tparent := filepath.Dir(path.Path)\n\t\tmapPathToChildren[parent] = append(mapPathToChildren[parent], path)\n\t}\n\n\tvar sb strings.Builder\n\tvar printTree func(path PathInfo, prefix string, isLast bool)\n\tprintTree = func(path PathInfo, prefix string, isLast bool) {\n\t\t// Print current item\n\t\tconnector := \"├── \"\n\t\tif isLast {\n\t\t\tconnector = \"└── \"\n\t\t}\n\n\t\tname := filepath.Base(path.Path)\n\t\tif path.IsDir {\n\t\t\tname += \"/\"\n\t\t}\n\t\tsb.WriteString(fmt.Sprintf(\"%s%s%s\\n\", prefix, connector, name))\n\n\t\t// Print children\n\t\tchildPrefix := prefix + \"│   \"\n\t\tif isLast {\n\t\t\tchildPrefix = prefix + \"    \"\n\t\t}\n\n\t\tpathChildren := mapPathToChildren[path.Path]\n\t\tfor i, child := range pathChildren {\n\t\t\tprintTree(child, childPrefix, i == len(pathChildren)-1)\n\t\t}\n\t}\n\n\t// Process root level items\n\trootPaths := mapPathToChildren[filepath.Dir(paths[0].Path)]\n\tfor i, path := range rootPaths {\n\t\tprintTree(path, \"\", i == len(rootPaths)-1)\n\t}\n\n\treturn sb.String()\n}\n\n// WriteOutput writes content to a file or stdout\nfunc WriteOutput(path string, content string) error {\n\tif path == \"stdout\" || path == \"-\" {\n\t\t_, err := fmt.Print(content)\n\t\treturn err\n\t}\n\n\tdir := filepath.Dir(path)\n\tif err := os.MkdirAll(dir, 0755); err != nil {\n\t\treturn fmt.Errorf(\"failed to create directory: %w\", err)\n\t}\n\n\treturn os.WriteFile(path, []byte(content), 0644)\n}\n\n// FormatTimestamp returns a formatted timestamp string\nfunc FormatTimestamp() string {\n\treturn time.Now().Format(\"2006-01-02 15:04:05\")\n}\n"
+    },
+    {
+      "path": "main.go",
+      "content": "package main\n\nimport (\n\t\"fmt\"\n\t\"strings\"\n\n\t\"github.com/Broderick-Westrope/amalgo/internal\"\n\t\"github.com/Broderick-Westrope/amalgo/internal/parser\"\n\t\"github.com/alecthomas/kong\"\n\t\"github.com/fatih/color\"\n)\n\nconst (\n\tappName = \"amalgo\"\n\tversion = \"0.3.0\"\n)\n\nfunc main() {\n\tcli := RootCmd{\n\t\tVersion: versionFlag(version),\n\t}\n\n\tctx := kong.Parse(\u0026cli,\n\t\tkong.Name(appName),\n\t\tkong.Description(\"Create consolidated snapshots of source code for analysis, documentation, and sharing with LLMs.\"),\n\t\tkong.UsageOnError(),\n\t\tkong.DefaultEnvars(appName),\n\t\tkong.Vars{\n\t\t\t\"version\": string(cli.Version),\n\t\t})\n\terr := ctx.Run()\n\tctx.FatalIfErrorf(err)\n}\n\ntype RootCmd struct {\n\t// Default command args and flags\n\tDirs          []string              `arg:\"\" optional:\"\" help:\"Directories to analyze. If a file is provided it's parent directory will be used.\" type:\"path\" default:\".\"`\n\tOutput        string                `help:\"Specifies the destination path for the output file. The file extension will automatically adjust based on the selected format (see '--format').\" short:\"o\" type:\"path\" placeholder:\"amalgo.txt\"`\n\tStdout        bool                  `help:\"Redirects all output to standard output (terminal) instead of writing to a file. Useful for piping output to other commands.\"`\n\tFilter        []string              `help:\"Controls which files are processed using glob patterns. Include patterns are processed first, then exclude patterns (prefixed with '!'). Hidden files and directories are excluded by default.\" short:\"f\" default:\"*,!.*\"`\n\tNoTree        bool                  `help:\"Skips the inclusion of the file tree in the output.\" default:\"false\"`\n\tNoDump        bool                  `help:\"Skips the inclusion of file contents in the output.\" default:\"false\"`\n\tOutline       bool                  `help:\"Includes in the output a language-aware outline of code files, showing functions, classes, and other significant elements. Only available for specific file extensions: '.go'.\" default:\"false\"`\n\tNoColor       bool                  `help:\"Disables ANSI color codes in the output.\" default:\"false\"`\n\tIncludeBinary bool                  `help:\"Processes binary files instead of skipping them. Use with caution as this may produce large or unreadable output.\" default:\"false\"`\n\tFormat        internal.OutputFormat `help:\"Selects an alternative output format. This affects both the structure and the file extension of the output. Options: 'default', 'json'.\" enum:\"default,json\" default:\"default\"`\n\n\t// Subcommands\n\tVersion versionFlag `help:\"Displays the current version of the tool and exits immediately.\" short:\"v\" name:\"version\"`\n}\n\nfunc (c *RootCmd) validate() bool {\n\tif c.Output == \"\" {\n\t\tif c.Format == internal.OutputFormatJSON {\n\t\t\tc.Output += \"amalgo.json\"\n\t\t} else {\n\t\t\tc.Output = \"amalgo.txt\"\n\t\t}\n\t}\n\n\tissues := make([]string, 0)\n\tif len(c.Dirs) == 0 {\n\t\tissues = append(issues, \"At least one input directory is required.\")\n\t}\n\tif c.NoDump \u0026\u0026 c.NoTree \u0026\u0026 !c.Outline {\n\t\tissues = append(issues, \"An empty output is not allowed (no dump, no tree, and no outline).\")\n\t}\n\n\tif len(issues) == 0 {\n\t\treturn true\n\t}\n\tout := strings.Join(issues, \"\\n\")\n\tif !c.NoColor {\n\t\tout = color.RedString(out)\n\t}\n\tfmt.Println(out)\n\treturn false\n}\n\nfunc (c *RootCmd) Run() error {\n\tif !c.validate() {\n\t\treturn nil\n\t}\n\n\toutputDest := c.Output\n\tif c.Stdout {\n\t\toutputDest = \"stdout\"\n\t}\n\n\tregistry := parser.NewRegistry()\n\tregistry.Register(parser.NewGoParser())\n\n\tincludePatterns := make([]string, 0)\n\texcludePatterns := make([]string, 0)\n\tfor _, original := range c.Filter {\n\t\tnew, found := strings.CutPrefix(original, \"!\")\n\t\tif found {\n\t\t\texcludePatterns = append(excludePatterns, new)\n\t\t} else {\n\t\t\tincludePatterns = append(includePatterns, original)\n\t\t}\n\t}\n\tif len(includePatterns) == 0 {\n\t\tincludePatterns = []string{\"*\"}\n\t}\n\n\tpaths, err := internal.TraverseDirectories(c.Dirs, includePatterns, excludePatterns)\n\tif err != nil {\n\t\treturn fmt.Errorf(\"traversing directories: %w\", err)\n\t}\n\n\toutputOpts := internal.OutputOptions{\n\t\tNoTree:     c.NoTree,\n\t\tNoDump:     c.NoDump,\n\t\tOutline:    c.Outline,\n\t\tSkipBinary: !c.IncludeBinary,\n\t\tFormat:     c.Format,\n\t}\n\n\toutput, err := internal.GenerateOutput(paths, registry, outputOpts)\n\tif err != nil {\n\t\treturn fmt.Errorf(\"generating output: %w\", err)\n\t}\n\n\terr = internal.WriteOutput(outputDest, output)\n\tif err != nil {\n\t\treturn fmt.Errorf(\"writing output: %w\", err)\n\t}\n\n\t// Print success message unless output is stdout.\n\tif outputDest != \"stdout\" {\n\t\tmsg := fmt.Sprintf(\"Successfully generated output to: %s\\n\", outputDest)\n\t\tif !c.NoColor {\n\t\t\tmsg = color.GreenString(msg)\n\t\t}\n\t\tfmt.Print(msg)\n\t}\n\n\treturn nil\n}\n\ntype versionFlag string\n\nfunc (v versionFlag) Decode(_ *kong.DecodeContext) error { return nil }\nfunc (v versionFlag) IsBool() bool                       { return true }\nfunc (v versionFlag) BeforeApply(app *kong.Kong, vars kong.Vars) error {\n\tfmt.Println(vars[\"version\"])\n\tapp.Exit(0)\n\treturn nil\n}\n"
+    }
+  ],
+  "outlines": [
+    {
+      "path": "internal/output.go",
+      "symbols": [
         {
-            "path": "go.mod",
-            "content": "module github.com/Broderick-Westrope/amalgo\n\ngo 1.23.3\n\nrequire (\n\tgithub.com/alecthomas/kong v1.6.1 // indirect\n\tgithub.com/fatih/color v1.18.0 // indirect\n\tgithub.com/gobwas/glob v0.2.3 // indirect\n\tgithub.com/mattn/go-colorable v0.1.13 // indirect\n\tgithub.com/mattn/go-isatty v0.0.20 // indirect\n\tgolang.org/x/sys v0.25.0 // indirect\n)\n"
+          "type": "type",
+          "name": "OutputFormat",
+          "metadata": null
         },
         {
-            "path": "go.sum",
-            "content": "github.com/alecthomas/kong v1.6.1 h1:/7bVimARU3uxPD0hbryPE8qWrS3Oz3kPQoxA/H2NKG8=\ngithub.com/alecthomas/kong v1.6.1/go.mod h1:p2vqieVMeTAnaC83txKtXe8FLke2X07aruPWXyMPQrU=\ngithub.com/fatih/color v1.18.0 h1:S8gINlzdQ840/4pfAwic/ZE0djQEH3wM94VfqLTZcOM=\ngithub.com/fatih/color v1.18.0/go.mod h1:4FelSpRwEGDpQ12mAdzqdOukCy4u8WUtOY6lkT/6HfU=\ngithub.com/gobwas/glob v0.2.3 h1:A4xDbljILXROh+kObIiy5kIaPYD8e96x1tgBhUI5J+Y=\ngithub.com/gobwas/glob v0.2.3/go.mod h1:d3Ez4x06l9bZtSvzIay5+Yzi0fmZzPgnTbPcKjJAkT8=\ngithub.com/mattn/go-colorable v0.1.13 h1:fFA4WZxdEF4tXPZVKMLwD8oUnCTTo08duU7wxecdEvA=\ngithub.com/mattn/go-colorable v0.1.13/go.mod h1:7S9/ev0klgBDR4GtXTXX8a3vIGJpMovkB8vQcUbaXHg=\ngithub.com/mattn/go-isatty v0.0.16/go.mod h1:kYGgaQfpe5nmfYZH+SKPsOc2e4SrIfOl2e/yFXSvRLM=\ngithub.com/mattn/go-isatty v0.0.20 h1:xfD0iDuEKnDkl03q4limB+vH+GxLEtL/jb4xVJSWWEY=\ngithub.com/mattn/go-isatty v0.0.20/go.mod h1:W+V8PltTTMOvKvAeJH7IuucS94S2C6jfK/D7dTCTo3Y=\ngolang.org/x/sys v0.0.0-20220811171246-fbc7d0a398ab/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=\ngolang.org/x/sys v0.6.0/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=\ngolang.org/x/sys v0.25.0 h1:r+8e+loiHxRqhXVl6ML1nO3l1+oFoWbnlu2Ehimmi34=\ngolang.org/x/sys v0.25.0/go.mod h1:/VUhepiaJMQUp4+oa/7Zr1D23ma6VTLIYjOOTFZPUcA=\n"
+          "type": "const",
+          "name": "OutputFormatDefault",
+          "metadata": null
         },
         {
-            "path": "internal/output.go",
-            "content": "package internal\n\nimport (\n\t\"fmt\"\n\t\"os\"\n\t\"strings\"\n\n\t\"github.com/Broderick-Westrope/amalgo/internal/parser\"\n)\n\ntype OutputFormat string\n\nconst (\n\tOutputFormatDefault = \"default\"\n\tOutputFormatJSON    = \"json\"\n)\n\n// Options configures the output generation\ntype OutputOptions struct {\n\tNoTree     bool\n\tNoDump     bool\n\tOutline    bool\n\tSkipBinary bool\n\tFormat     OutputFormat\n}\n\n// GenerateOutput creates the complete output string\nfunc GenerateOutput(paths []PathInfo, registry *parser.Registry, opts OutputOptions) (string, error) {\n\tif opts.Format == OutputFormatJSON {\n\t\treturn generateOutputJSON(paths, registry, opts)\n\t}\n\n\toutput := fmt.Sprintf(\"## Generated with Amalgo at: %s\\n\\n\", FormatTimestamp())\n\n\tif !opts.NoTree {\n\t\toutput += generateTree(paths)\n\t}\n\n\tif opts.Outline {\n\t\toutlines, err := generateOutlines(paths, registry)\n\t\tif err != nil {\n\t\t\treturn \"\", fmt.Errorf(\"generating outlines: %w\", err)\n\t\t}\n\t\toutput += outlines\n\t}\n\n\tif !opts.NoDump {\n\t\tfilesDump, err := dumpFiles(paths, opts.SkipBinary)\n\t\tif err != nil {\n\t\t\treturn \"\", fmt.Errorf(\"dumping files: %w\", err)\n\t\t}\n\t\toutput += filesDump\n\t}\n\treturn output, nil\n}\n\nfunc generateOutlines(paths []PathInfo, registry *parser.Registry) (string, error) {\n\toutput := \"## Language-Specific Outlines\\n\\n\"\n\n\tvar temp string\n\tvar err error\n\tfor _, path := range paths {\n\t\tif path.IsDir {\n\t\t\tcontinue\n\t\t}\n\n\t\t// Skip if no parser available for this file type\n\t\tif !registry.IsSupported(path.Path) {\n\t\t\tcontinue\n\t\t}\n\n\t\ttemp, err = processFileOutline(path.Path, registry)\n\t\tif err != nil {\n\t\t\treturn \"\", fmt.Errorf(\"processing outline for %q: %w\", path.Path, err)\n\t\t}\n\t\toutput += fmt.Sprintf(\"\\n### File: %s\\n%s\", path.RelativePath, temp)\n\t}\n\treturn output, nil\n}\n\nfunc processFileOutline(filePath string, registry *parser.Registry) (string, error) {\n\tcontent, err := os.ReadFile(filePath)\n\tif err != nil {\n\t\treturn \"\", err\n\t}\n\n\tparser := registry.GetParser(filePath)\n\tif parser == nil {\n\t\treturn \"\", fmt.Errorf(\"no parser found for %q\", filePath)\n\t}\n\n\toutline, err := parser.Parse(content, filePath)\n\tif err != nil {\n\t\treturn \"\", fmt.Errorf(\"parsing file %q: %w\", filePath, err)\n\t}\n\n\tif len(outline.Errors) \u003e 0 {\n\t\tvar errMsgs []string\n\t\tfor _, err := range outline.Errors {\n\t\t\terrMsgs = append(errMsgs, err.Error())\n\t\t}\n\t\treturn fmt.Sprintf(\"Parsing errors:\\n%s\\n\", strings.Join(errMsgs, \"\\n\")), nil\n\t}\n\n\treturn writeSymbols(outline.Symbols, 0)\n}\n\nfunc writeSymbols(symbols []*parser.Symbol, depth int) (string, error) {\n\tindent := strings.Repeat(\"  \", depth)\n\tvar output string\n\tfor _, symbol := range symbols {\n\t\t// Write symbol header\n\t\toutput += fmt.Sprintf(\"%s%s: %s\", indent, strings.ToUpper(symbol.Type), symbol.Name)\n\t\tif symbol.Signature != \"\" {\n\t\t\toutput += fmt.Sprintf(\" (%s)\", symbol.Signature)\n\t\t}\n\t\toutput += \"\\n\"\n\n\t\t// Write decorators if present\n\t\tif len(symbol.Decorators) \u003e 0 {\n\t\t\toutput += fmt.Sprintf(\"%s  Decorators: %s\\n\", indent, strings.Join(symbol.Decorators, \", \"))\n\t\t}\n\n\t\t// Write docstring if present\n\t\tif symbol.Docstring != \"\" {\n\t\t\tdocLines := strings.Split(strings.TrimSpace(symbol.Docstring), \"\\n\")\n\t\t\toutput += fmt.Sprintf(\"%s  Documentation:\\n\", indent)\n\t\t\tfor _, line := range docLines {\n\t\t\t\toutput += fmt.Sprintf(\"%s    %s\\n\", indent, line)\n\t\t\t}\n\t\t}\n\n\t\t// Recursively write children\n\t\tif len(symbol.Children) \u003e 0 {\n\t\t\ttemp, err := writeSymbols(symbol.Children, depth+1)\n\t\t\tif err != nil {\n\t\t\t\treturn \"\", err\n\t\t\t}\n\t\t\toutput += temp\n\t\t}\n\t}\n\treturn output, nil\n}\n\nfunc dumpFiles(paths []PathInfo, skipBinary bool) (string, error) {\n\tvar sb strings.Builder\n\tsb.WriteString(\"## File Contents\\n\\n\")\n\n\tfor _, path := range paths {\n\t\tif path.IsDir {\n\t\t\tcontinue\n\t\t}\n\n\t\tif skipBinary {\n\t\t\t// Check if file is binary\n\t\t\tisBinary, err := IsBinaryFile(path.Path)\n\t\t\tif err != nil {\n\t\t\t\treturn \"\", fmt.Errorf(\"failed to check if file is binary: %w\", err)\n\t\t\t}\n\n\t\t\tif isBinary {\n\t\t\t\tsb.WriteString(\n\t\t\t\t\tfmt.Sprintf(\"--- File: %s\\n\u003cbinary file\u003e\\n\\n\", path.RelativePath),\n\t\t\t\t)\n\t\t\t\tcontinue\n\t\t\t}\n\t\t}\n\n\t\t// Read and write file content\n\t\tfileContent, err := os.ReadFile(path.Path)\n\t\tif err != nil {\n\t\t\treturn \"\", fmt.Errorf(\"failed to read file %s: %w\", path.Path, err)\n\t\t}\n\n\t\tsb.WriteString(\n\t\t\tfmt.Sprintf(\"--- File: %s\\n%s\\n\\n\", path.RelativePath, string(fileContent)),\n\t\t)\n\t}\n\treturn sb.String(), nil\n}\n\nfunc generateTree(paths []PathInfo) string {\n\ttree := GenerateTree(paths)\n\treturn fmt.Sprintf(\"## File Tree\\n\\n%s\\n\", tree)\n}\n"
+          "type": "const",
+          "name": "OutputFormatJSON",
+          "metadata": null
         },
         {
-            "path": "internal/output_json.go",
-            "content": "package internal\n\nimport (\n\t\"encoding/json\"\n\t\"fmt\"\n\t\"os\"\n\n\t\"github.com/Broderick-Westrope/amalgo/internal/parser\"\n)\n\ntype JSONDocument struct {\n\tTimestamp string            `json:\"timestamp\"`\n\tTree      string            `json:\"tree,omitempty\"`\n\tFiles     []JSONFile        `json:\"files,omitempty\"`\n\tOutlines  []JSONFileOutline `json:\"outlines,omitempty\"`\n}\n\ntype JSONFile struct {\n\tPath    string `json:\"path\"`\n\tContent string `json:\"content,omitempty\"`\n\tBinary  bool   `json:\"binary,omitempty\"`\n}\n\n// JSONFileOutline represents the parsed structure of a source file\ntype JSONFileOutline struct {\n\tPath    string       `json:\"path\"`\n\tSymbols []JSONSymbol `json:\"symbols,omitempty\"`\n\tErrors  []string     `json:\"errors,omitempty\"`\n}\n\n// JSONSymbol represents a parsed symbol (function, type, class, etc.)\ntype JSONSymbol struct {\n\tType          string       `json:\"type\"`                    // e.g., \"function\", \"class\", \"interface\"\n\tName          string       `json:\"name\"`                    // Name of the symbol\n\tSignature     string       `json:\"signature,omitempty\"`     // Full signature for functions/methods\n\tDocumentation string       `json:\"documentation,omitempty\"` // Associated documentation\n\tDecorators    []string     `json:\"decorators,omitempty\"`    // Any decorators/annotations\n\tChildren      []JSONSymbol `json:\"children,omitempty\"`      // Nested symbols (e.g., methods in a class)\n\tMetadata      any          `json:\"metadata,omitempty\"`      // Additional language-specific metadata\n}\n\nfunc generateOutputJSON(paths []PathInfo, registry *parser.Registry, opts OutputOptions) (string, error) {\n\tdoc := JSONDocument{\n\t\tTimestamp: FormatTimestamp(),\n\t}\n\n\tif !opts.NoTree {\n\t\tdoc.Tree = GenerateTree(paths)\n\t}\n\n\tif !opts.NoDump {\n\t\tfiles, err := generateFilesJSON(paths, opts.SkipBinary)\n\t\tif err != nil {\n\t\t\treturn \"\", fmt.Errorf(\"dumping files: %w\", err)\n\t\t}\n\t\tdoc.Files = files\n\t}\n\n\tif opts.Outline {\n\t\toutlines, err := generateOutlinesJSON(paths, registry)\n\t\tif err != nil {\n\t\t\treturn \"\", fmt.Errorf(\"generating outlines: %w\", err)\n\t\t}\n\t\tdoc.Outlines = outlines\n\t}\n\n\toutput, err := json.MarshalIndent(doc, \"\", \"  \")\n\tif err != nil {\n\t\treturn \"\", fmt.Errorf(\"marshaling JSON: %w\", err)\n\t}\n\n\treturn string(output), nil\n}\n\nfunc generateFilesJSON(paths []PathInfo, skipBinary bool) ([]JSONFile, error) {\n\tfiles := make([]JSONFile, 0, len(paths))\n\n\tfor _, path := range paths {\n\t\tif path.IsDir {\n\t\t\tcontinue\n\t\t}\n\n\t\tif skipBinary {\n\t\t\tisBinary, err := IsBinaryFile(path.Path)\n\t\t\tif err != nil {\n\t\t\t\treturn nil, fmt.Errorf(\"checking if binary: %w\", err)\n\t\t\t}\n\n\t\t\tif isBinary {\n\t\t\t\tfiles = append(files, JSONFile{\n\t\t\t\t\tPath:   path.RelativePath,\n\t\t\t\t\tBinary: true,\n\t\t\t\t})\n\t\t\t\tcontinue\n\t\t\t}\n\t\t}\n\n\t\tcontent, err := os.ReadFile(path.Path)\n\t\tif err != nil {\n\t\t\treturn nil, fmt.Errorf(\"reading file %s: %w\", path.Path, err)\n\t\t}\n\n\t\tfiles = append(files, JSONFile{\n\t\t\tPath:    path.RelativePath,\n\t\t\tContent: string(content),\n\t\t})\n\t}\n\n\treturn files, nil\n}\n\nfunc generateOutlinesJSON(paths []PathInfo, registry *parser.Registry) ([]JSONFileOutline, error) {\n\toutlines := make([]JSONFileOutline, 0)\n\n\tfor _, path := range paths {\n\t\tif path.IsDir || !registry.IsSupported(path.Path) {\n\t\t\tcontinue\n\t\t}\n\n\t\tcontent, err := os.ReadFile(path.Path)\n\t\tif err != nil {\n\t\t\treturn nil, fmt.Errorf(\"reading file %s: %w\", path.Path, err)\n\t\t}\n\n\t\tparser := registry.GetParser(path.Path)\n\t\tparsedOutline, err := parser.Parse(content, path.Path)\n\t\tif err != nil {\n\t\t\treturn nil, fmt.Errorf(\"parsing file %s: %w\", path.Path, err)\n\t\t}\n\n\t\toutline := JSONFileOutline{\n\t\t\tPath:    path.RelativePath,\n\t\t\tSymbols: make([]JSONSymbol, 0, len(parsedOutline.Symbols)),\n\t\t}\n\n\t\t// Convert parser.Symbols to our JSON Symbol type\n\t\tfor _, sym := range parsedOutline.Symbols {\n\t\t\tsymbol, err := convertSymbol(sym)\n\t\t\tif err != nil {\n\t\t\t\treturn nil, fmt.Errorf(\"converting symbol in %s: %w\", path.Path, err)\n\t\t\t}\n\t\t\toutline.Symbols = append(outline.Symbols, symbol)\n\t\t}\n\n\t\t// Add any parsing errors\n\t\tif len(parsedOutline.Errors) \u003e 0 {\n\t\t\toutline.Errors = make([]string, len(parsedOutline.Errors))\n\t\t\tfor i, err := range parsedOutline.Errors {\n\t\t\t\toutline.Errors[i] = err.Error()\n\t\t\t}\n\t\t}\n\n\t\toutlines = append(outlines, outline)\n\t}\n\n\treturn outlines, nil\n}\n\nfunc convertSymbol(ps *parser.Symbol) (JSONSymbol, error) {\n\tchildren := make([]JSONSymbol, 0, len(ps.Children))\n\tfor _, child := range ps.Children {\n\t\tconverted, err := convertSymbol(child)\n\t\tif err != nil {\n\t\t\treturn JSONSymbol{}, fmt.Errorf(\"converting child symbol: %w\", err)\n\t\t}\n\t\tchildren = append(children, converted)\n\t}\n\n\treturn JSONSymbol{\n\t\tType:          ps.Type,\n\t\tName:          ps.Name,\n\t\tSignature:     ps.Signature,\n\t\tDocumentation: ps.Docstring,\n\t\tDecorators:    ps.Decorators,\n\t\tChildren:      children,\n\t\tMetadata:      ps.Metadata,\n\t}, nil\n}\n"
+          "type": "struct",
+          "name": "OutputOptions",
+          "documentation": "Options configures the output generation\n",
+          "children": [
+            {
+              "type": "field",
+              "name": "NoTree",
+              "signature": "bool",
+              "metadata": null
+            },
+            {
+              "type": "field",
+              "name": "NoDump",
+              "signature": "bool",
+              "metadata": null
+            },
+            {
+              "type": "field",
+              "name": "Outline",
+              "signature": "bool",
+              "metadata": null
+            },
+            {
+              "type": "field",
+              "name": "SkipBinary",
+              "signature": "bool",
+              "metadata": null
+            },
+            {
+              "type": "field",
+              "name": "Format",
+              "signature": "OutputFormat",
+              "metadata": null
+            }
+          ],
+          "metadata": null
         },
         {
-            "path": "internal/parser/golang.go",
-            "content": "package parser\n\nimport (\n\t\"go/ast\"\n\t\"go/parser\"\n\t\"go/token\"\n\t\"strings\"\n)\n\n// GoParser implements Parser for Go source files\ntype GoParser struct{}\n\n// NewGoParser creates a new Go parser\nfunc NewGoParser() *GoParser {\n\treturn \u0026GoParser{}\n}\n\nfunc (p *GoParser) Extensions() []string {\n\treturn []string{\".go\"}\n}\n\nfunc (p *GoParser) Parse(content []byte, filename string) (*FileOutline, error) {\n\tfset := token.NewFileSet()\n\tfile, err := parser.ParseFile(fset, filename, content, parser.ParseComments)\n\tif err != nil {\n\t\treturn \u0026FileOutline{\n\t\t\tFilename: filename,\n\t\t\tErrors:   []error{err},\n\t\t}, nil\n\t}\n\n\toutline := \u0026FileOutline{\n\t\tFilename: filename,\n\t\tSymbols:  make([]*Symbol, 0),\n\t}\n\n\t// Process package-level declarations\n\tfor _, decl := range file.Decls {\n\t\tsymbols := p.processDecl(decl, file)\n\t\toutline.Symbols = append(outline.Symbols, symbols...)\n\t}\n\n\treturn outline, nil\n}\n\nfunc (p *GoParser) processDecl(decl ast.Decl, file *ast.File) []*Symbol {\n\tvar symbols []*Symbol\n\n\tswitch d := decl.(type) {\n\tcase *ast.FuncDecl:\n\t\tsymbol := \u0026Symbol{\n\t\t\tType:      \"function\",\n\t\t\tName:      d.Name.Name,\n\t\t\tSignature: p.getFunctionSignature(d),\n\t\t\tDocstring: p.getDocstring(d.Doc),\n\t\t}\n\n\t\t// Handle methods\n\t\tif d.Recv != nil {\n\t\t\tsymbol.Type = \"method\"\n\t\t\tif len(d.Recv.List) \u003e 0 {\n\t\t\t\trecvType := p.typeToString(d.Recv.List[0].Type)\n\t\t\t\tsymbol.Name = recvType + \".\" + d.Name.Name\n\t\t\t}\n\t\t}\n\n\t\tsymbols = append(symbols, symbol)\n\n\tcase *ast.GenDecl:\n\t\tswitch d.Tok {\n\t\tcase token.TYPE:\n\t\t\tfor _, spec := range d.Specs {\n\t\t\t\tif typeSpec, ok := spec.(*ast.TypeSpec); ok {\n\t\t\t\t\tsymbol := \u0026Symbol{\n\t\t\t\t\t\tType:      p.getTypeSymbolType(typeSpec),\n\t\t\t\t\t\tName:      typeSpec.Name.Name,\n\t\t\t\t\t\tDocstring: p.getDocstring(d.Doc),\n\t\t\t\t\t}\n\n\t\t\t\t\t// Handle interface methods and struct fields\n\t\t\t\t\tif symbol.Type == \"interface\" {\n\t\t\t\t\t\tif iface, ok := typeSpec.Type.(*ast.InterfaceType); ok {\n\t\t\t\t\t\t\tsymbol.Children = p.processInterface(iface)\n\t\t\t\t\t\t}\n\t\t\t\t\t} else if symbol.Type == \"struct\" {\n\t\t\t\t\t\tif structType, ok := typeSpec.Type.(*ast.StructType); ok {\n\t\t\t\t\t\t\tsymbol.Children = p.processStruct(structType)\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\n\t\t\t\t\tsymbols = append(symbols, symbol)\n\t\t\t\t}\n\t\t\t}\n\n\t\tcase token.CONST, token.VAR:\n\t\t\tfor _, spec := range d.Specs {\n\t\t\t\tif valSpec, ok := spec.(*ast.ValueSpec); ok {\n\t\t\t\t\tfor _, name := range valSpec.Names {\n\t\t\t\t\t\tsymbol := \u0026Symbol{\n\t\t\t\t\t\t\tType:      strings.ToLower(d.Tok.String()),\n\t\t\t\t\t\t\tName:      name.Name,\n\t\t\t\t\t\t\tDocstring: p.getDocstring(d.Doc),\n\t\t\t\t\t\t}\n\t\t\t\t\t\tif valSpec.Type != nil {\n\t\t\t\t\t\t\tsymbol.Signature = p.typeToString(valSpec.Type)\n\t\t\t\t\t\t}\n\t\t\t\t\t\tsymbols = append(symbols, symbol)\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t}\n\n\treturn symbols\n}\n\nfunc (p *GoParser) processInterface(iface *ast.InterfaceType) []*Symbol {\n\tvar methods []*Symbol\n\tif iface.Methods == nil {\n\t\treturn methods\n\t}\n\n\tfor _, method := range iface.Methods.List {\n\t\tif len(method.Names) == 0 {\n\t\t\tcontinue // Skip embedded interfaces\n\t\t}\n\n\t\tmethodType, ok := method.Type.(*ast.FuncType)\n\t\tif !ok {\n\t\t\tcontinue\n\t\t}\n\n\t\tfor _, name := range method.Names {\n\t\t\tsymbol := \u0026Symbol{\n\t\t\t\tType:      \"method\",\n\t\t\t\tName:      name.Name,\n\t\t\t\tSignature: p.getFuncTypeSignature(methodType),\n\t\t\t\tDocstring: p.getDocstring(method.Doc),\n\t\t\t}\n\t\t\tmethods = append(methods, symbol)\n\t\t}\n\t}\n\n\treturn methods\n}\n\nfunc (p *GoParser) processStruct(structType *ast.StructType) []*Symbol {\n\tvar fields []*Symbol\n\tif structType.Fields == nil {\n\t\treturn fields\n\t}\n\n\tfor _, field := range structType.Fields.List {\n\t\tif len(field.Names) == 0 {\n\t\t\t// Anonymous/embedded field\n\t\t\tsymbol := \u0026Symbol{\n\t\t\t\tType:      \"field\",\n\t\t\t\tName:      p.typeToString(field.Type),\n\t\t\t\tSignature: p.typeToString(field.Type),\n\t\t\t\tDocstring: p.getDocstring(field.Doc),\n\t\t\t}\n\t\t\tfields = append(fields, symbol)\n\t\t\tcontinue\n\t\t}\n\n\t\tfor _, name := range field.Names {\n\t\t\tsymbol := \u0026Symbol{\n\t\t\t\tType:      \"field\",\n\t\t\t\tName:      name.Name,\n\t\t\t\tSignature: p.typeToString(field.Type),\n\t\t\t\tDocstring: p.getDocstring(field.Doc),\n\t\t\t}\n\t\t\tfields = append(fields, symbol)\n\t\t}\n\t}\n\n\treturn fields\n}\n\nfunc (p *GoParser) getFunctionSignature(fn *ast.FuncDecl) string {\n\tvar builder strings.Builder\n\tbuilder.WriteString(\"func \")\n\n\t// Add receiver if it's a method\n\tif fn.Recv != nil \u0026\u0026 len(fn.Recv.List) \u003e 0 {\n\t\tbuilder.WriteString(\"(\")\n\t\tif len(fn.Recv.List[0].Names) \u003e 0 {\n\t\t\tbuilder.WriteString(fn.Recv.List[0].Names[0].Name)\n\t\t\tbuilder.WriteString(\" \")\n\t\t}\n\t\tbuilder.WriteString(p.typeToString(fn.Recv.List[0].Type))\n\t\tbuilder.WriteString(\") \")\n\t}\n\n\tbuilder.WriteString(fn.Name.Name)\n\tbuilder.WriteString(p.getFuncTypeSignature(fn.Type))\n\treturn builder.String()\n}\n\nfunc (p *GoParser) getFuncTypeSignature(ft *ast.FuncType) string {\n\tvar builder strings.Builder\n\tbuilder.WriteString(\"(\")\n\n\tif ft.Params != nil {\n\t\tfor i, param := range ft.Params.List {\n\t\t\tif i \u003e 0 {\n\t\t\t\tbuilder.WriteString(\", \")\n\t\t\t}\n\t\t\tfor j, name := range param.Names {\n\t\t\t\tif j \u003e 0 {\n\t\t\t\t\tbuilder.WriteString(\", \")\n\t\t\t\t}\n\t\t\t\tbuilder.WriteString(name.Name)\n\t\t\t}\n\t\t\tif len(param.Names) \u003e 0 {\n\t\t\t\tbuilder.WriteString(\" \")\n\t\t\t}\n\t\t\tbuilder.WriteString(p.typeToString(param.Type))\n\t\t}\n\t}\n\n\tbuilder.WriteString(\")\")\n\n\tif ft.Results != nil {\n\t\tif ft.Results.NumFields() == 1 \u0026\u0026 len(ft.Results.List[0].Names) == 0 {\n\t\t\tbuilder.WriteString(\" \")\n\t\t\tbuilder.WriteString(p.typeToString(ft.Results.List[0].Type))\n\t\t} else {\n\t\t\tbuilder.WriteString(\" (\")\n\t\t\tfor i, result := range ft.Results.List {\n\t\t\t\tif i \u003e 0 {\n\t\t\t\t\tbuilder.WriteString(\", \")\n\t\t\t\t}\n\t\t\t\tfor j, name := range result.Names {\n\t\t\t\t\tif j \u003e 0 {\n\t\t\t\t\t\tbuilder.WriteString(\", \")\n\t\t\t\t\t}\n\t\t\t\t\tbuilder.WriteString(name.Name)\n\t\t\t\t}\n\t\t\t\tif len(result.Names) \u003e 0 {\n\t\t\t\t\tbuilder.WriteString(\" \")\n\t\t\t\t}\n\t\t\t\tbuilder.WriteString(p.typeToString(result.Type))\n\t\t\t}\n\t\t\tbuilder.WriteString(\")\")\n\t\t}\n\t}\n\n\treturn builder.String()\n}\n\nfunc (p *GoParser) typeToString(expr ast.Expr) string {\n\tswitch t := expr.(type) {\n\tcase *ast.Ident:\n\t\treturn t.Name\n\tcase *ast.SelectorExpr:\n\t\treturn p.typeToString(t.X) + \".\" + t.Sel.Name\n\tcase *ast.StarExpr:\n\t\treturn \"*\" + p.typeToString(t.X)\n\tcase *ast.ArrayType:\n\t\treturn \"[]\" + p.typeToString(t.Elt)\n\tcase *ast.MapType:\n\t\treturn \"map[\" + p.typeToString(t.Key) + \"]\" + p.typeToString(t.Value)\n\tcase *ast.InterfaceType:\n\t\treturn \"interface{}\"\n\tcase *ast.ChanType:\n\t\tswitch t.Dir {\n\t\tcase ast.SEND:\n\t\t\treturn \"chan\u003c- \" + p.typeToString(t.Value)\n\t\tcase ast.RECV:\n\t\t\treturn \"\u003c-chan \" + p.typeToString(t.Value)\n\t\tdefault:\n\t\t\treturn \"chan \" + p.typeToString(t.Value)\n\t\t}\n\tcase *ast.FuncType:\n\t\treturn \"func\" + p.getFuncTypeSignature(t)\n\tcase *ast.StructType:\n\t\treturn \"struct{...}\"\n\tcase *ast.Ellipsis:\n\t\treturn \"...\" + p.typeToString(t.Elt)\n\tdefault:\n\t\treturn \"\u003cunknown\u003e\"\n\t}\n}\n\nfunc (p *GoParser) getTypeSymbolType(typeSpec *ast.TypeSpec) string {\n\tswitch typeSpec.Type.(type) {\n\tcase *ast.InterfaceType:\n\t\treturn \"interface\"\n\tcase *ast.StructType:\n\t\treturn \"struct\"\n\tdefault:\n\t\treturn \"type\"\n\t}\n}\n\nfunc (p *GoParser) getDocstring(doc *ast.CommentGroup) string {\n\tif doc == nil {\n\t\treturn \"\"\n\t}\n\treturn doc.Text()\n}\n"
+          "type": "function",
+          "name": "GenerateOutput",
+          "signature": "func GenerateOutput(paths []PathInfo, registry *parser.Registry, opts OutputOptions) (string, error)",
+          "documentation": "GenerateOutput creates the complete output string\n",
+          "metadata": null
         },
         {
-            "path": "internal/parser/parser.go",
-            "content": "// Package parser provides language-specific parsing capabilities\npackage parser\n\nimport \"path/filepath\"\n\n// Parser defines the interface for language-specific parsers\ntype Parser interface {\n\t// Parse analyzes the content of a file and returns a structured outline\n\tParse(content []byte, filename string) (*FileOutline, error)\n\n\t// Extensions returns the file extensions this parser handles\n\tExtensions() []string\n}\n\n// Symbol represents a parsed symbol (function, type, class, etc.)\ntype Symbol struct {\n\tType       string         // e.g., \"function\", \"class\", \"interface\", etc.\n\tName       string         // Name of the symbol\n\tSignature  string         // Full signature for functions/methods\n\tDocstring  string         // Associated documentation\n\tDecorators []string       // Any decorators/annotations\n\tChildren   []*Symbol      // Nested symbols (e.g., methods in a class)\n\tMetadata   map[string]any // Additional language-specific metadata\n}\n\n// FileOutline represents the parsed structure of a source file\ntype FileOutline struct {\n\tFilename string    // Name of the parsed file\n\tSymbols  []*Symbol // Top-level symbols in the file\n\tErrors   []error   // Any errors encountered during parsing\n}\n\n// Registry manages the available parsers\ntype Registry struct {\n\tparsers map[string]Parser\n}\n\n// NewRegistry creates a new parser registry\nfunc NewRegistry() *Registry {\n\treturn \u0026Registry{\n\t\tparsers: make(map[string]Parser),\n\t}\n}\n\n// Register adds a parser to the registry\nfunc (r *Registry) Register(parser Parser) {\n\tfor _, ext := range parser.Extensions() {\n\t\tr.parsers[ext] = parser\n\t}\n}\n\n// GetParser returns the appropriate parser for a file extension\nfunc (r *Registry) GetParser(filename string) Parser {\n\text := filepath.Ext(filename)\n\treturn r.parsers[ext]\n}\n\n// IsSupported checks if there's a parser available for the given file extension\nfunc (r *Registry) IsSupported(filename string) bool {\n\text := filepath.Ext(filename)\n\t_, ok := r.parsers[ext]\n\treturn ok\n}\n"
+          "type": "function",
+          "name": "generateOutlines",
+          "signature": "func generateOutlines(paths []PathInfo, registry *parser.Registry) (string, error)",
+          "metadata": null
         },
         {
-            "path": "internal/traverse.go",
-            "content": "package internal\n\nimport (\n\t\"fmt\"\n\t\"io/fs\"\n\t\"os\"\n\t\"path/filepath\"\n\t\"strings\"\n\n\t\"github.com/gobwas/glob\"\n)\n\n// PathInfo represents information about a file or directory\ntype PathInfo struct {\n\tPath         string\n\tRelativePath string\n\tDepth        int\n\tIsDir        bool\n}\n\n// TraverseDirectories traverses directories and collects path information\nfunc TraverseDirectories(directories []string, includePatterns []string, excludePatterns []string) ([]PathInfo, error) {\n\tincludeMatchers, err := createPatternMatchers(includePatterns)\n\tif err != nil {\n\t\treturn nil, fmt.Errorf(\"creating include pattern matchers: %w\", err)\n\t}\n\n\texcludeMatchers, err := createPatternMatchers(excludePatterns)\n\tif err != nil {\n\t\treturn nil, fmt.Errorf(\"creating exclude pattern matchers: %w\", err)\n\t}\n\n\tvar paths []PathInfo\n\tfor _, dir := range directories {\n\t\tbasePath, err := filepath.Abs(dir)\n\t\tif err != nil {\n\t\t\treturn nil, err\n\t\t}\n\n\t\tbaseInfo, err := os.Stat(basePath)\n\t\tif err != nil {\n\t\t\treturn nil, err\n\t\t}\n\n\t\tif !baseInfo.IsDir() {\n\t\t\tbasePath = filepath.Dir(basePath)\n\t\t\tbaseInfo, err = os.Stat(basePath)\n\t\t\tif err != nil {\n\t\t\t\treturn nil, err\n\t\t\t}\n\t\t\tif !baseInfo.IsDir() {\n\t\t\t\treturn nil, fmt.Errorf(\"expected base path %q to be a directory\", basePath)\n\t\t\t}\n\t\t}\n\n\t\t// Add base directory if it matches patterns\n\t\tbaseRelPath := filepath.Base(basePath)\n\t\tif shouldIncludePath(baseRelPath, true, includeMatchers, excludeMatchers) {\n\t\t\tpaths = append(paths, PathInfo{\n\t\t\t\tPath:         basePath,\n\t\t\t\tRelativePath: baseRelPath,\n\t\t\t\tDepth:        1,\n\t\t\t\tIsDir:        true,\n\t\t\t})\n\t\t}\n\n\t\t// Walk the directory tree\n\t\terr = filepath.WalkDir(basePath, func(path string, d fs.DirEntry, err error) error {\n\t\t\tif err != nil {\n\t\t\t\treturn err\n\t\t\t}\n\n\t\t\t// Skip the root directory as it's already processed\n\t\t\tif path == basePath {\n\t\t\t\treturn nil\n\t\t\t}\n\n\t\t\trelPath, err := filepath.Rel(basePath, path)\n\t\t\tif err != nil {\n\t\t\t\treturn err\n\t\t\t}\n\n\t\t\t// Convert to forward slashes for consistent pattern matching\n\t\t\trelPath = filepath.ToSlash(relPath)\n\t\t\tisDir := d.IsDir()\n\n\t\t\t// Check if path should be included based on patterns\n\t\t\tif !shouldIncludePath(relPath, isDir, includeMatchers, excludeMatchers) {\n\t\t\t\tif isDir {\n\t\t\t\t\treturn filepath.SkipDir\n\t\t\t\t}\n\t\t\t\treturn nil\n\t\t\t}\n\n\t\t\tdepth := strings.Count(relPath, \"/\") + 1\n\n\t\t\tpaths = append(paths, PathInfo{\n\t\t\t\tPath:         path,\n\t\t\t\tRelativePath: relPath,\n\t\t\t\tDepth:        depth,\n\t\t\t\tIsDir:        isDir,\n\t\t\t})\n\n\t\t\treturn nil\n\t\t})\n\n\t\tif err != nil {\n\t\t\treturn nil, err\n\t\t}\n\t}\n\n\treturn paths, nil\n}\n\n// shouldIncludePath determines if a path should be included based on the patterns\nfunc shouldIncludePath(path string, isDir bool, includeMatchers, excludeMatchers []glob.Glob) bool {\n\t// Append trailing slash for directories to match directory-specific patterns\n\tif isDir {\n\t\tpath = path + \"/\"\n\t}\n\n\tfor _, matcher := range excludeMatchers {\n\t\tif matcher.Match(path) {\n\t\t\treturn false\n\t\t}\n\t}\n\n\tfor _, matcher := range includeMatchers {\n\t\tif matcher.Match(path) {\n\t\t\treturn true\n\t\t}\n\t}\n\treturn false\n}\n\nfunc createPatternMatchers(patterns []string) ([]glob.Glob, error) {\n\tmatchers := make([]glob.Glob, len(patterns))\n\tfor i, pattern := range patterns {\n\t\tg, err := glob.Compile(pattern)\n\t\tif err != nil {\n\t\t\treturn nil, fmt.Errorf(\"invalid pattern '%s': %w\", pattern, err)\n\t\t}\n\t\tmatchers[i] = g\n\t}\n\treturn matchers, nil\n}\n"
+          "type": "function",
+          "name": "processFileOutline",
+          "signature": "func processFileOutline(filePath string, registry *parser.Registry) (string, error)",
+          "metadata": null
         },
         {
-            "path": "internal/utils.go",
-            "content": "package internal\n\nimport (\n\t\"bytes\"\n\t\"fmt\"\n\t\"io\"\n\t\"os\"\n\t\"path/filepath\"\n\t\"strings\"\n\t\"time\"\n)\n\n// IsBinaryFile determines if a file is binary by checking its contents\nfunc IsBinaryFile(path string) (bool, error) {\n\tfile, err := os.Open(path)\n\tif err != nil {\n\t\treturn false, err\n\t}\n\tdefer file.Close()\n\n\t// Read first 512 bytes\n\tbuf := make([]byte, 512)\n\tn, err := file.Read(buf)\n\tif err != nil \u0026\u0026 err != io.EOF {\n\t\treturn false, err\n\t}\n\tbuf = buf[:n]\n\n\t// Check for null bytes\n\tif bytes.IndexByte(buf, 0) != -1 {\n\t\treturn true, nil\n\t}\n\n\t// Look for non-text characters\n\tfor _, b := range buf {\n\t\tif b \u003c 32 \u0026\u0026 b != 9 \u0026\u0026 b != 10 \u0026\u0026 b != 13 { // Not tab, LF, or CR\n\t\t\treturn true, nil\n\t\t}\n\t}\n\n\treturn false, nil\n}\n\n// GenerateTree creates a textual representation of the directory structure\nfunc GenerateTree(paths []PathInfo) string {\n\tmapPathToChildren := make(map[string][]PathInfo)\n\tfor _, path := range paths {\n\t\tif path.Depth == 0 {\n\t\t\tcontinue\n\t\t}\n\t\tparent := filepath.Dir(path.Path)\n\t\tmapPathToChildren[parent] = append(mapPathToChildren[parent], path)\n\t}\n\n\tvar sb strings.Builder\n\tvar printTree func(path PathInfo, prefix string, isLast bool)\n\tprintTree = func(path PathInfo, prefix string, isLast bool) {\n\t\t// Print current item\n\t\tconnector := \"├── \"\n\t\tif isLast {\n\t\t\tconnector = \"└── \"\n\t\t}\n\n\t\tname := filepath.Base(path.Path)\n\t\tif path.IsDir {\n\t\t\tname += \"/\"\n\t\t}\n\t\tsb.WriteString(fmt.Sprintf(\"%s%s%s\\n\", prefix, connector, name))\n\n\t\t// Print children\n\t\tchildPrefix := prefix + \"│   \"\n\t\tif isLast {\n\t\t\tchildPrefix = prefix + \"    \"\n\t\t}\n\n\t\tpathChildren := mapPathToChildren[path.Path]\n\t\tfor i, child := range pathChildren {\n\t\t\tprintTree(child, childPrefix, i == len(pathChildren)-1)\n\t\t}\n\t}\n\n\t// Process root level items\n\trootPaths := mapPathToChildren[filepath.Dir(paths[0].Path)]\n\tfor i, path := range rootPaths {\n\t\tprintTree(path, \"\", i == len(rootPaths)-1)\n\t}\n\n\treturn sb.String()\n}\n\n// WriteOutput writes content to a file or stdout\nfunc WriteOutput(path string, content string) error {\n\tif path == \"stdout\" || path == \"-\" {\n\t\t_, err := fmt.Print(content)\n\t\treturn err\n\t}\n\n\tdir := filepath.Dir(path)\n\tif err := os.MkdirAll(dir, 0755); err != nil {\n\t\treturn fmt.Errorf(\"failed to create directory: %w\", err)\n\t}\n\n\treturn os.WriteFile(path, []byte(content), 0644)\n}\n\n// FormatTimestamp returns a formatted timestamp string\nfunc FormatTimestamp() string {\n\treturn time.Now().Format(\"2006-01-02 15:04:05\")\n}\n"
+          "type": "function",
+          "name": "writeSymbols",
+          "signature": "func writeSymbols(symbols []*parser.Symbol, depth int) (string, error)",
+          "metadata": null
         },
         {
-            "path": "main.go",
-            "content": "package main\n\nimport (\n\t\"fmt\"\n\t\"strings\"\n\n\t\"github.com/Broderick-Westrope/amalgo/internal\"\n\t\"github.com/Broderick-Westrope/amalgo/internal/parser\"\n\t\"github.com/alecthomas/kong\"\n\t\"github.com/fatih/color\"\n)\n\nconst (\n\tappName = \"amalgo\"\n\tversion = \"0.2.0\"\n)\n\nfunc main() {\n\tcli := RootCmd{\n\t\tVersion: versionFlag(version),\n\t}\n\n\tctx := kong.Parse(\u0026cli,\n\t\tkong.Name(appName),\n\t\tkong.Description(\"Create consolidated snapshots of source code for analysis, documentation, and sharing with LLMs.\"),\n\t\tkong.UsageOnError(),\n\t\tkong.DefaultEnvars(appName),\n\t\tkong.Vars{\n\t\t\t\"version\": string(cli.Version),\n\t\t})\n\terr := ctx.Run()\n\tctx.FatalIfErrorf(err)\n}\n\ntype RootCmd struct {\n\t// Default command args and flags\n\tDirs          []string              `arg:\"\" optional:\"\" help:\"Directories to analyze. If a file is provided it's parent directory will be used.\" type:\"path\" default:\".\"`\n\tOutput        string                `help:\"Specifies the destination path for the output file. The file extension will automatically adjust based on the selected format (see '--format').\" short:\"o\" type:\"path\" placeholder:\"amalgo.txt\"`\n\tStdout        bool                  `help:\"Redirects all output to standard output (terminal) instead of writing to a file. Useful for piping output to other commands.\"`\n\tFilter        []string              `help:\"Controls which files are processed using glob patterns. Include patterns are processed first, then exclude patterns (prefixed with '!'). Hidden files and directories are excluded by default.\" short:\"f\" default:\"*,!.*\"`\n\tNoTree        bool                  `help:\"Skips the inclusion of the file tree in the output.\" default:\"false\"`\n\tNoDump        bool                  `help:\"Skips the inclusion of file contents in the output.\" default:\"false\"`\n\tOutline       bool                  `help:\"Includes in the output a language-aware outline of code files, showing functions, classes, and other significant elements. Only available for specific file extensions: '.go'.\" default:\"false\"`\n\tNoColor       bool                  `help:\"Disables ANSI color codes in the output.\" default:\"false\"`\n\tIncludeBinary bool                  `help:\"Processes binary files instead of skipping them. Use with caution as this may produce large or unreadable output.\" default:\"false\"`\n\tFormat        internal.OutputFormat `help:\"Selects an alternative output format. This affects both the structure and the file extension of the output. Options: 'default', 'json'.\" enum:\"default,json\" default:\"default\"`\n\n\t// Subcommands\n\tVersion versionFlag `help:\"Displays the current version of the tool and exits immediately.\" short:\"v\" name:\"version\"`\n}\n\nfunc (c *RootCmd) validate() bool {\n\tif c.Output == \"\" {\n\t\tif c.Format == internal.OutputFormatJSON {\n\t\t\tc.Output += \"amalgo.json\"\n\t\t} else {\n\t\t\tc.Output = \"amalgo.txt\"\n\t\t}\n\t}\n\n\tissues := make([]string, 0)\n\tif len(c.Dirs) == 0 {\n\t\tissues = append(issues, \"At least one input directory is required.\")\n\t}\n\tif c.NoDump \u0026\u0026 c.NoTree \u0026\u0026 !c.Outline {\n\t\tissues = append(issues, \"An empty output is not allowed (no dump, no tree, and no outline).\")\n\t}\n\n\tif len(issues) == 0 {\n\t\treturn true\n\t}\n\tout := strings.Join(issues, \"\\n\")\n\tif !c.NoColor {\n\t\tout = color.RedString(out)\n\t}\n\tfmt.Println(out)\n\treturn false\n}\n\nfunc (c *RootCmd) Run() error {\n\tif !c.validate() {\n\t\treturn nil\n\t}\n\n\toutputDest := c.Output\n\tif c.Stdout {\n\t\toutputDest = \"stdout\"\n\t}\n\n\tregistry := parser.NewRegistry()\n\tregistry.Register(parser.NewGoParser())\n\n\tincludePatterns := make([]string, 0)\n\texcludePatterns := make([]string, 0)\n\tfor _, original := range c.Filter {\n\t\tnew, found := strings.CutPrefix(original, \"!\")\n\t\tif found {\n\t\t\texcludePatterns = append(excludePatterns, new)\n\t\t} else {\n\t\t\tincludePatterns = append(includePatterns, original)\n\t\t}\n\t}\n\tif len(includePatterns) == 0 {\n\t\tincludePatterns = []string{\"*\"}\n\t}\n\n\tpaths, err := internal.TraverseDirectories(c.Dirs, includePatterns, excludePatterns)\n\tif err != nil {\n\t\treturn fmt.Errorf(\"traversing directories: %w\", err)\n\t}\n\n\toutputOpts := internal.OutputOptions{\n\t\tNoTree:     c.NoTree,\n\t\tNoDump:     c.NoDump,\n\t\tOutline:    c.Outline,\n\t\tSkipBinary: !c.IncludeBinary,\n\t\tFormat:     c.Format,\n\t}\n\n\toutput, err := internal.GenerateOutput(paths, registry, outputOpts)\n\tif err != nil {\n\t\treturn fmt.Errorf(\"generating output: %w\", err)\n\t}\n\n\terr = internal.WriteOutput(outputDest, output)\n\tif err != nil {\n\t\treturn fmt.Errorf(\"writing output: %w\", err)\n\t}\n\n\t// Print success message unless output is stdout.\n\tif outputDest != \"stdout\" {\n\t\tmsg := fmt.Sprintf(\"Successfully generated output to: %s\\n\", outputDest)\n\t\tif !c.NoColor {\n\t\t\tmsg = color.GreenString(msg)\n\t\t}\n\t\tfmt.Print(msg)\n\t}\n\n\treturn nil\n}\n\ntype versionFlag string\n\nfunc (v versionFlag) Decode(_ *kong.DecodeContext) error { return nil }\nfunc (v versionFlag) IsBool() bool                       { return true }\nfunc (v versionFlag) BeforeApply(app *kong.Kong, vars kong.Vars) error {\n\tfmt.Println(vars[\"version\"])\n\tapp.Exit(0)\n\treturn nil\n}\n"
+          "type": "function",
+          "name": "dumpFiles",
+          "signature": "func dumpFiles(paths []PathInfo, skipBinary bool) (string, error)",
+          "metadata": null
         }
-    ]
+      ]
+    },
+    {
+      "path": "internal/output_json.go",
+      "symbols": [
+        {
+          "type": "struct",
+          "name": "JSONDocument",
+          "children": [
+            {
+              "type": "field",
+              "name": "Timestamp",
+              "signature": "string",
+              "metadata": null
+            },
+            {
+              "type": "field",
+              "name": "Tree",
+              "signature": "string",
+              "metadata": null
+            },
+            {
+              "type": "field",
+              "name": "Files",
+              "signature": "[]JSONFile",
+              "metadata": null
+            },
+            {
+              "type": "field",
+              "name": "Outlines",
+              "signature": "[]JSONFileOutline",
+              "metadata": null
+            }
+          ],
+          "metadata": null
+        },
+        {
+          "type": "struct",
+          "name": "JSONFile",
+          "children": [
+            {
+              "type": "field",
+              "name": "Path",
+              "signature": "string",
+              "metadata": null
+            },
+            {
+              "type": "field",
+              "name": "Content",
+              "signature": "string",
+              "metadata": null
+            },
+            {
+              "type": "field",
+              "name": "Binary",
+              "signature": "bool",
+              "metadata": null
+            }
+          ],
+          "metadata": null
+        },
+        {
+          "type": "struct",
+          "name": "JSONFileOutline",
+          "documentation": "JSONFileOutline represents the parsed structure of a source file\n",
+          "children": [
+            {
+              "type": "field",
+              "name": "Path",
+              "signature": "string",
+              "metadata": null
+            },
+            {
+              "type": "field",
+              "name": "Symbols",
+              "signature": "[]JSONSymbol",
+              "metadata": null
+            },
+            {
+              "type": "field",
+              "name": "Errors",
+              "signature": "[]string",
+              "metadata": null
+            }
+          ],
+          "metadata": null
+        },
+        {
+          "type": "struct",
+          "name": "JSONSymbol",
+          "documentation": "JSONSymbol represents a parsed symbol (function, type, class, etc.)\n",
+          "children": [
+            {
+              "type": "field",
+              "name": "Type",
+              "signature": "string",
+              "metadata": null
+            },
+            {
+              "type": "field",
+              "name": "Name",
+              "signature": "string",
+              "metadata": null
+            },
+            {
+              "type": "field",
+              "name": "Signature",
+              "signature": "string",
+              "metadata": null
+            },
+            {
+              "type": "field",
+              "name": "Documentation",
+              "signature": "string",
+              "metadata": null
+            },
+            {
+              "type": "field",
+              "name": "Decorators",
+              "signature": "[]string",
+              "metadata": null
+            },
+            {
+              "type": "field",
+              "name": "Children",
+              "signature": "[]JSONSymbol",
+              "metadata": null
+            },
+            {
+              "type": "field",
+              "name": "Metadata",
+              "signature": "any",
+              "metadata": null
+            }
+          ],
+          "metadata": null
+        },
+        {
+          "type": "function",
+          "name": "generateOutputJSON",
+          "signature": "func generateOutputJSON(paths []PathInfo, registry *parser.Registry, opts OutputOptions) (string, error)",
+          "metadata": null
+        },
+        {
+          "type": "function",
+          "name": "generateFilesJSON",
+          "signature": "func generateFilesJSON(paths []PathInfo, skipBinary bool) ([]JSONFile, error)",
+          "metadata": null
+        },
+        {
+          "type": "function",
+          "name": "generateOutlinesJSON",
+          "signature": "func generateOutlinesJSON(paths []PathInfo, registry *parser.Registry) ([]JSONFileOutline, error)",
+          "metadata": null
+        },
+        {
+          "type": "function",
+          "name": "convertSymbol",
+          "signature": "func convertSymbol(ps *parser.Symbol) (JSONSymbol, error)",
+          "metadata": null
+        }
+      ]
+    },
+    {
+      "path": "internal/parser/golang.go",
+      "symbols": [
+        {
+          "type": "struct",
+          "name": "GoParser",
+          "documentation": "GoParser implements Parser for Go source files\n",
+          "metadata": null
+        },
+        {
+          "type": "function",
+          "name": "NewGoParser",
+          "signature": "func NewGoParser() *GoParser",
+          "documentation": "NewGoParser creates a new Go parser\n",
+          "metadata": null
+        },
+        {
+          "type": "method",
+          "name": "*GoParser.Extensions",
+          "signature": "func (p *GoParser) Extensions() []string",
+          "metadata": null
+        },
+        {
+          "type": "method",
+          "name": "*GoParser.Parse",
+          "signature": "func (p *GoParser) Parse(content []byte, filename string) (*FileOutline, error)",
+          "metadata": null
+        },
+        {
+          "type": "method",
+          "name": "*GoParser.processDecl",
+          "signature": "func (p *GoParser) processDecl(decl ast.Decl, file *ast.File) []*Symbol",
+          "metadata": null
+        },
+        {
+          "type": "method",
+          "name": "*GoParser.processInterface",
+          "signature": "func (p *GoParser) processInterface(iface *ast.InterfaceType) []*Symbol",
+          "metadata": null
+        },
+        {
+          "type": "method",
+          "name": "*GoParser.processStruct",
+          "signature": "func (p *GoParser) processStruct(structType *ast.StructType) []*Symbol",
+          "metadata": null
+        },
+        {
+          "type": "method",
+          "name": "*GoParser.getFunctionSignature",
+          "signature": "func (p *GoParser) getFunctionSignature(fn *ast.FuncDecl) string",
+          "metadata": null
+        },
+        {
+          "type": "method",
+          "name": "*GoParser.getFuncTypeSignature",
+          "signature": "func (p *GoParser) getFuncTypeSignature(ft *ast.FuncType) string",
+          "metadata": null
+        },
+        {
+          "type": "method",
+          "name": "*GoParser.typeToString",
+          "signature": "func (p *GoParser) typeToString(expr ast.Expr) string",
+          "metadata": null
+        },
+        {
+          "type": "method",
+          "name": "*GoParser.getTypeSymbolType",
+          "signature": "func (p *GoParser) getTypeSymbolType(typeSpec *ast.TypeSpec) string",
+          "metadata": null
+        },
+        {
+          "type": "method",
+          "name": "*GoParser.getDocstring",
+          "signature": "func (p *GoParser) getDocstring(doc *ast.CommentGroup) string",
+          "metadata": null
+        }
+      ]
+    },
+    {
+      "path": "internal/parser/parser.go",
+      "symbols": [
+        {
+          "type": "interface",
+          "name": "Parser",
+          "documentation": "Parser defines the interface for language-specific parsers\n",
+          "children": [
+            {
+              "type": "method",
+              "name": "Parse",
+              "signature": "(content []byte, filename string) (*FileOutline, error)",
+              "documentation": "Parse analyzes the content of a file and returns a structured outline\n",
+              "metadata": null
+            },
+            {
+              "type": "method",
+              "name": "Extensions",
+              "signature": "() []string",
+              "documentation": "Extensions returns the file extensions this parser handles\n",
+              "metadata": null
+            }
+          ],
+          "metadata": null
+        },
+        {
+          "type": "struct",
+          "name": "Symbol",
+          "documentation": "Symbol represents a parsed symbol (function, type, class, etc.)\n",
+          "children": [
+            {
+              "type": "field",
+              "name": "Type",
+              "signature": "string",
+              "metadata": null
+            },
+            {
+              "type": "field",
+              "name": "Name",
+              "signature": "string",
+              "metadata": null
+            },
+            {
+              "type": "field",
+              "name": "Signature",
+              "signature": "string",
+              "metadata": null
+            },
+            {
+              "type": "field",
+              "name": "Docstring",
+              "signature": "string",
+              "metadata": null
+            },
+            {
+              "type": "field",
+              "name": "Decorators",
+              "signature": "[]string",
+              "metadata": null
+            },
+            {
+              "type": "field",
+              "name": "Children",
+              "signature": "[]*Symbol",
+              "metadata": null
+            },
+            {
+              "type": "field",
+              "name": "Metadata",
+              "signature": "map[string]any",
+              "metadata": null
+            }
+          ],
+          "metadata": null
+        },
+        {
+          "type": "struct",
+          "name": "FileOutline",
+          "documentation": "FileOutline represents the parsed structure of a source file\n",
+          "children": [
+            {
+              "type": "field",
+              "name": "Filename",
+              "signature": "string",
+              "metadata": null
+            },
+            {
+              "type": "field",
+              "name": "Symbols",
+              "signature": "[]*Symbol",
+              "metadata": null
+            },
+            {
+              "type": "field",
+              "name": "Errors",
+              "signature": "[]error",
+              "metadata": null
+            }
+          ],
+          "metadata": null
+        },
+        {
+          "type": "struct",
+          "name": "Registry",
+          "documentation": "Registry manages the available parsers\n",
+          "children": [
+            {
+              "type": "field",
+              "name": "parsers",
+              "signature": "map[string]Parser",
+              "metadata": null
+            }
+          ],
+          "metadata": null
+        },
+        {
+          "type": "function",
+          "name": "NewRegistry",
+          "signature": "func NewRegistry() *Registry",
+          "documentation": "NewRegistry creates a new parser registry\n",
+          "metadata": null
+        },
+        {
+          "type": "method",
+          "name": "*Registry.Register",
+          "signature": "func (r *Registry) Register(parser Parser)",
+          "documentation": "Register adds a parser to the registry\n",
+          "metadata": null
+        },
+        {
+          "type": "method",
+          "name": "*Registry.GetParser",
+          "signature": "func (r *Registry) GetParser(filename string) Parser",
+          "documentation": "GetParser returns the appropriate parser for a file extension\n",
+          "metadata": null
+        },
+        {
+          "type": "method",
+          "name": "*Registry.IsSupported",
+          "signature": "func (r *Registry) IsSupported(filename string) bool",
+          "documentation": "IsSupported checks if there's a parser available for the given file extension\n",
+          "metadata": null
+        }
+      ]
+    },
+    {
+      "path": "internal/traverse.go",
+      "symbols": [
+        {
+          "type": "struct",
+          "name": "PathInfo",
+          "documentation": "PathInfo represents information about a file or directory\n",
+          "children": [
+            {
+              "type": "field",
+              "name": "Path",
+              "signature": "string",
+              "metadata": null
+            },
+            {
+              "type": "field",
+              "name": "RelativePath",
+              "signature": "string",
+              "metadata": null
+            },
+            {
+              "type": "field",
+              "name": "Depth",
+              "signature": "int",
+              "metadata": null
+            },
+            {
+              "type": "field",
+              "name": "IsDir",
+              "signature": "bool",
+              "metadata": null
+            },
+            {
+              "type": "field",
+              "name": "matchReason",
+              "signature": "matchReason",
+              "documentation": "matchReason tracks why this path was included\n",
+              "metadata": null
+            }
+          ],
+          "metadata": null
+        },
+        {
+          "type": "type",
+          "name": "matchReason",
+          "metadata": null
+        },
+        {
+          "type": "const",
+          "name": "noMatch",
+          "signature": "matchReason",
+          "metadata": null
+        },
+        {
+          "type": "const",
+          "name": "directMatch",
+          "metadata": null
+        },
+        {
+          "type": "const",
+          "name": "potentialParent",
+          "metadata": null
+        },
+        {
+          "type": "struct",
+          "name": "patternMatcher",
+          "documentation": "patternMatcher pairs a glob matcher with its original pattern string\n",
+          "children": [
+            {
+              "type": "field",
+              "name": "pattern",
+              "signature": "string",
+              "metadata": null
+            },
+            {
+              "type": "field",
+              "name": "matcher",
+              "signature": "glob.Glob",
+              "metadata": null
+            }
+          ],
+          "metadata": null
+        },
+        {
+          "type": "method",
+          "name": "*patternMatcher.Match",
+          "signature": "func (pm *patternMatcher) Match(value string) bool",
+          "metadata": null
+        },
+        {
+          "type": "method",
+          "name": "*patternMatcher.String",
+          "signature": "func (pm *patternMatcher) String() string",
+          "metadata": null
+        },
+        {
+          "type": "function",
+          "name": "TraverseDirectories",
+          "signature": "func TraverseDirectories(directories []string, includePatterns []string, excludePatterns []string) ([]PathInfo, error)",
+          "documentation": "TraverseDirectories traverses directories and collects path information\n",
+          "metadata": null
+        },
+        {
+          "type": "function",
+          "name": "shouldIncludePath",
+          "signature": "func shouldIncludePath(path string, isDir bool, includeMatchers, excludeMatchers []patternMatcher) (bool, matchReason)",
+          "documentation": "shouldIncludePath determines if a path should be included based on the patterns\n",
+          "metadata": null
+        },
+        {
+          "type": "function",
+          "name": "couldContainMatches",
+          "signature": "func couldContainMatches(dirPath string, includeMatchers []patternMatcher) bool",
+          "documentation": "couldContainMatches checks if a directory could potentially contain files that match the patterns\n",
+          "metadata": null
+        },
+        {
+          "type": "function",
+          "name": "createPatternMatchers",
+          "signature": "func createPatternMatchers(patterns []string) ([]patternMatcher, error)",
+          "metadata": null
+        }
+      ]
+    },
+    {
+      "path": "internal/traverse_test.go",
+      "symbols": [
+        {
+          "type": "function",
+          "name": "TestShouldIncludePath",
+          "signature": "func TestShouldIncludePath(t *testing.T)",
+          "metadata": null
+        },
+        {
+          "type": "function",
+          "name": "TestCouldContainMatches",
+          "signature": "func TestCouldContainMatches(t *testing.T)",
+          "metadata": null
+        }
+      ]
+    },
+    {
+      "path": "internal/utils.go",
+      "symbols": [
+        {
+          "type": "function",
+          "name": "IsBinaryFile",
+          "signature": "func IsBinaryFile(path string) (bool, error)",
+          "documentation": "IsBinaryFile determines if a file is binary by checking its contents\n",
+          "metadata": null
+        },
+        {
+          "type": "function",
+          "name": "GenerateTree",
+          "signature": "func GenerateTree(paths []PathInfo) string",
+          "documentation": "GenerateTree creates a textual representation of the directory structure\n",
+          "metadata": null
+        },
+        {
+          "type": "function",
+          "name": "WriteOutput",
+          "signature": "func WriteOutput(path string, content string) error",
+          "documentation": "WriteOutput writes content to a file or stdout\n",
+          "metadata": null
+        },
+        {
+          "type": "function",
+          "name": "FormatTimestamp",
+          "signature": "func FormatTimestamp() string",
+          "documentation": "FormatTimestamp returns a formatted timestamp string\n",
+          "metadata": null
+        }
+      ]
+    },
+    {
+      "path": "main.go",
+      "symbols": [
+        {
+          "type": "const",
+          "name": "appName",
+          "metadata": null
+        },
+        {
+          "type": "const",
+          "name": "version",
+          "metadata": null
+        },
+        {
+          "type": "function",
+          "name": "main",
+          "signature": "func main()",
+          "metadata": null
+        },
+        {
+          "type": "struct",
+          "name": "RootCmd",
+          "children": [
+            {
+              "type": "field",
+              "name": "Dirs",
+              "signature": "[]string",
+              "documentation": "Default command args and flags\n",
+              "metadata": null
+            },
+            {
+              "type": "field",
+              "name": "Output",
+              "signature": "string",
+              "metadata": null
+            },
+            {
+              "type": "field",
+              "name": "Stdout",
+              "signature": "bool",
+              "metadata": null
+            },
+            {
+              "type": "field",
+              "name": "Filter",
+              "signature": "[]string",
+              "metadata": null
+            },
+            {
+              "type": "field",
+              "name": "NoTree",
+              "signature": "bool",
+              "metadata": null
+            },
+            {
+              "type": "field",
+              "name": "NoDump",
+              "signature": "bool",
+              "metadata": null
+            },
+            {
+              "type": "field",
+              "name": "Outline",
+              "signature": "bool",
+              "metadata": null
+            },
+            {
+              "type": "field",
+              "name": "NoColor",
+              "signature": "bool",
+              "metadata": null
+            },
+            {
+              "type": "field",
+              "name": "IncludeBinary",
+              "signature": "bool",
+              "metadata": null
+            },
+            {
+              "type": "field",
+              "name": "Format",
+              "signature": "internal.OutputFormat",
+              "metadata": null
+            },
+            {
+              "type": "field",
+              "name": "Version",
+              "signature": "versionFlag",
+              "documentation": "Subcommands\n",
+              "metadata": null
+            }
+          ],
+          "metadata": null
+        },
+        {
+          "type": "method",
+          "name": "*RootCmd.validate",
+          "signature": "func (c *RootCmd) validate() bool",
+          "metadata": null
+        },
+        {
+          "type": "method",
+          "name": "*RootCmd.Run",
+          "signature": "func (c *RootCmd) Run() error",
+          "metadata": null
+        },
+        {
+          "type": "type",
+          "name": "versionFlag",
+          "metadata": null
+        },
+        {
+          "type": "method",
+          "name": "versionFlag.Decode",
+          "signature": "func (v versionFlag) Decode(_ *kong.DecodeContext) error",
+          "metadata": null
+        },
+        {
+          "type": "method",
+          "name": "versionFlag.IsBool",
+          "signature": "func (v versionFlag) IsBool() bool",
+          "metadata": null
+        },
+        {
+          "type": "method",
+          "name": "versionFlag.BeforeApply",
+          "signature": "func (v versionFlag) BeforeApply(app *kong.Kong, vars kong.Vars) error",
+          "metadata": null
+        }
+      ]
+    }
+  ]
 }

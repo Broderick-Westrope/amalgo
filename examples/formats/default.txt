@@ -1,53 +1,212 @@
-## Generated with Amalgo at: 2025-01-12 20:48:13
+## Generated with Amalgo at: 2025-01-12 23:06:17
 
 ## File Tree
 
-├── go.mod
-├── go.sum
-├── internal/
-│   ├── output.go
-│   ├── output_json.go
-│   ├── parser/
-│   │   ├── golang.go
-│   │   └── parser.go
-│   ├── traverse.go
-│   └── utils.go
-└── main.go
+└── amalgo/
+    ├── main.go
+    └── internal/
+        ├── output.go
+        ├── output_json.go
+        ├── traverse.go
+        ├── traverse_test.go
+        ├── utils.go
+        └── parser/
+            ├── golang.go
+            └── parser.go
 
+## Language-Specific Outlines
+
+
+### File: internal/output.go
+TYPE: OutputFormat
+CONST: OutputFormatDefault
+CONST: OutputFormatJSON
+STRUCT: OutputOptions
+  Documentation:
+    Options configures the output generation
+  FIELD: NoTree (bool)
+  FIELD: NoDump (bool)
+  FIELD: Outline (bool)
+  FIELD: SkipBinary (bool)
+  FIELD: Format (OutputFormat)
+FUNCTION: GenerateOutput (func GenerateOutput(paths []PathInfo, registry *parser.Registry, opts OutputOptions) (string, error))
+  Documentation:
+    GenerateOutput creates the complete output string
+FUNCTION: generateOutlines (func generateOutlines(paths []PathInfo, registry *parser.Registry) (string, error))
+FUNCTION: processFileOutline (func processFileOutline(filePath string, registry *parser.Registry) (string, error))
+FUNCTION: writeSymbols (func writeSymbols(symbols []*parser.Symbol, depth int) (string, error))
+FUNCTION: dumpFiles (func dumpFiles(paths []PathInfo, skipBinary bool) (string, error))
+
+### File: internal/output_json.go
+STRUCT: JSONDocument
+  FIELD: Timestamp (string)
+  FIELD: Tree (string)
+  FIELD: Files ([]JSONFile)
+  FIELD: Outlines ([]JSONFileOutline)
+STRUCT: JSONFile
+  FIELD: Path (string)
+  FIELD: Content (string)
+  FIELD: Binary (bool)
+STRUCT: JSONFileOutline
+  Documentation:
+    JSONFileOutline represents the parsed structure of a source file
+  FIELD: Path (string)
+  FIELD: Symbols ([]JSONSymbol)
+  FIELD: Errors ([]string)
+STRUCT: JSONSymbol
+  Documentation:
+    JSONSymbol represents a parsed symbol (function, type, class, etc.)
+  FIELD: Type (string)
+  FIELD: Name (string)
+  FIELD: Signature (string)
+  FIELD: Documentation (string)
+  FIELD: Decorators ([]string)
+  FIELD: Children ([]JSONSymbol)
+  FIELD: Metadata (any)
+FUNCTION: generateOutputJSON (func generateOutputJSON(paths []PathInfo, registry *parser.Registry, opts OutputOptions) (string, error))
+FUNCTION: generateFilesJSON (func generateFilesJSON(paths []PathInfo, skipBinary bool) ([]JSONFile, error))
+FUNCTION: generateOutlinesJSON (func generateOutlinesJSON(paths []PathInfo, registry *parser.Registry) ([]JSONFileOutline, error))
+FUNCTION: convertSymbol (func convertSymbol(ps *parser.Symbol) (JSONSymbol, error))
+
+### File: internal/parser/golang.go
+STRUCT: GoParser
+  Documentation:
+    GoParser implements Parser for Go source files
+FUNCTION: NewGoParser (func NewGoParser() *GoParser)
+  Documentation:
+    NewGoParser creates a new Go parser
+METHOD: *GoParser.Extensions (func (p *GoParser) Extensions() []string)
+METHOD: *GoParser.Parse (func (p *GoParser) Parse(content []byte, filename string) (*FileOutline, error))
+METHOD: *GoParser.processDecl (func (p *GoParser) processDecl(decl ast.Decl, file *ast.File) []*Symbol)
+METHOD: *GoParser.processInterface (func (p *GoParser) processInterface(iface *ast.InterfaceType) []*Symbol)
+METHOD: *GoParser.processStruct (func (p *GoParser) processStruct(structType *ast.StructType) []*Symbol)
+METHOD: *GoParser.getFunctionSignature (func (p *GoParser) getFunctionSignature(fn *ast.FuncDecl) string)
+METHOD: *GoParser.getFuncTypeSignature (func (p *GoParser) getFuncTypeSignature(ft *ast.FuncType) string)
+METHOD: *GoParser.typeToString (func (p *GoParser) typeToString(expr ast.Expr) string)
+METHOD: *GoParser.getTypeSymbolType (func (p *GoParser) getTypeSymbolType(typeSpec *ast.TypeSpec) string)
+METHOD: *GoParser.getDocstring (func (p *GoParser) getDocstring(doc *ast.CommentGroup) string)
+
+### File: internal/parser/parser.go
+INTERFACE: Parser
+  Documentation:
+    Parser defines the interface for language-specific parsers
+  METHOD: Parse ((content []byte, filename string) (*FileOutline, error))
+    Documentation:
+      Parse analyzes the content of a file and returns a structured outline
+  METHOD: Extensions (() []string)
+    Documentation:
+      Extensions returns the file extensions this parser handles
+STRUCT: Symbol
+  Documentation:
+    Symbol represents a parsed symbol (function, type, class, etc.)
+  FIELD: Type (string)
+  FIELD: Name (string)
+  FIELD: Signature (string)
+  FIELD: Docstring (string)
+  FIELD: Decorators ([]string)
+  FIELD: Children ([]*Symbol)
+  FIELD: Metadata (map[string]any)
+STRUCT: FileOutline
+  Documentation:
+    FileOutline represents the parsed structure of a source file
+  FIELD: Filename (string)
+  FIELD: Symbols ([]*Symbol)
+  FIELD: Errors ([]error)
+STRUCT: Registry
+  Documentation:
+    Registry manages the available parsers
+  FIELD: parsers (map[string]Parser)
+FUNCTION: NewRegistry (func NewRegistry() *Registry)
+  Documentation:
+    NewRegistry creates a new parser registry
+METHOD: *Registry.Register (func (r *Registry) Register(parser Parser))
+  Documentation:
+    Register adds a parser to the registry
+METHOD: *Registry.GetParser (func (r *Registry) GetParser(filename string) Parser)
+  Documentation:
+    GetParser returns the appropriate parser for a file extension
+METHOD: *Registry.IsSupported (func (r *Registry) IsSupported(filename string) bool)
+  Documentation:
+    IsSupported checks if there's a parser available for the given file extension
+
+### File: internal/traverse.go
+STRUCT: PathInfo
+  Documentation:
+    PathInfo represents information about a file or directory
+  FIELD: Path (string)
+  FIELD: RelativePath (string)
+  FIELD: Depth (int)
+  FIELD: IsDir (bool)
+  FIELD: matchReason (matchReason)
+    Documentation:
+      matchReason tracks why this path was included
+TYPE: matchReason
+CONST: noMatch (matchReason)
+CONST: directMatch
+CONST: potentialParent
+STRUCT: patternMatcher
+  Documentation:
+    patternMatcher pairs a glob matcher with its original pattern string
+  FIELD: pattern (string)
+  FIELD: matcher (glob.Glob)
+METHOD: *patternMatcher.Match (func (pm *patternMatcher) Match(value string) bool)
+METHOD: *patternMatcher.String (func (pm *patternMatcher) String() string)
+FUNCTION: TraverseDirectories (func TraverseDirectories(directories []string, includePatterns []string, excludePatterns []string) ([]PathInfo, error))
+  Documentation:
+    TraverseDirectories traverses directories and collects path information
+FUNCTION: shouldIncludePath (func shouldIncludePath(path string, isDir bool, includeMatchers, excludeMatchers []patternMatcher) (bool, matchReason))
+  Documentation:
+    shouldIncludePath determines if a path should be included based on the patterns
+FUNCTION: couldContainMatches (func couldContainMatches(dirPath string, includeMatchers []patternMatcher) bool)
+  Documentation:
+    couldContainMatches checks if a directory could potentially contain files that match the patterns
+FUNCTION: createPatternMatchers (func createPatternMatchers(patterns []string) ([]patternMatcher, error))
+
+### File: internal/traverse_test.go
+FUNCTION: TestShouldIncludePath (func TestShouldIncludePath(t *testing.T))
+FUNCTION: TestCouldContainMatches (func TestCouldContainMatches(t *testing.T))
+
+### File: internal/utils.go
+FUNCTION: IsBinaryFile (func IsBinaryFile(path string) (bool, error))
+  Documentation:
+    IsBinaryFile determines if a file is binary by checking its contents
+FUNCTION: GenerateTree (func GenerateTree(paths []PathInfo) string)
+  Documentation:
+    GenerateTree creates a textual representation of the directory structure
+FUNCTION: WriteOutput (func WriteOutput(path string, content string) error)
+  Documentation:
+    WriteOutput writes content to a file or stdout
+FUNCTION: FormatTimestamp (func FormatTimestamp() string)
+  Documentation:
+    FormatTimestamp returns a formatted timestamp string
+
+### File: main.go
+CONST: appName
+CONST: version
+FUNCTION: main (func main())
+STRUCT: RootCmd
+  FIELD: Dirs ([]string)
+    Documentation:
+      Default command args and flags
+  FIELD: Output (string)
+  FIELD: Stdout (bool)
+  FIELD: Filter ([]string)
+  FIELD: NoTree (bool)
+  FIELD: NoDump (bool)
+  FIELD: Outline (bool)
+  FIELD: NoColor (bool)
+  FIELD: IncludeBinary (bool)
+  FIELD: Format (internal.OutputFormat)
+  FIELD: Version (versionFlag)
+    Documentation:
+      Subcommands
+METHOD: *RootCmd.validate (func (c *RootCmd) validate() bool)
+METHOD: *RootCmd.Run (func (c *RootCmd) Run() error)
+TYPE: versionFlag
+METHOD: versionFlag.Decode (func (v versionFlag) Decode(_ *kong.DecodeContext) error)
+METHOD: versionFlag.IsBool (func (v versionFlag) IsBool() bool)
+METHOD: versionFlag.BeforeApply (func (v versionFlag) BeforeApply(app *kong.Kong, vars kong.Vars) error)
 ## File Contents
-
---- File: go.mod
-module github.com/Broderick-Westrope/amalgo
-
-go 1.23.3
-
-require (
-	github.com/alecthomas/kong v1.6.1 // indirect
-	github.com/fatih/color v1.18.0 // indirect
-	github.com/gobwas/glob v0.2.3 // indirect
-	github.com/mattn/go-colorable v0.1.13 // indirect
-	github.com/mattn/go-isatty v0.0.20 // indirect
-	golang.org/x/sys v0.25.0 // indirect
-)
-
-
---- File: go.sum
-github.com/alecthomas/kong v1.6.1 h1:/7bVimARU3uxPD0hbryPE8qWrS3Oz3kPQoxA/H2NKG8=
-github.com/alecthomas/kong v1.6.1/go.mod h1:p2vqieVMeTAnaC83txKtXe8FLke2X07aruPWXyMPQrU=
-github.com/fatih/color v1.18.0 h1:S8gINlzdQ840/4pfAwic/ZE0djQEH3wM94VfqLTZcOM=
-github.com/fatih/color v1.18.0/go.mod h1:4FelSpRwEGDpQ12mAdzqdOukCy4u8WUtOY6lkT/6HfU=
-github.com/gobwas/glob v0.2.3 h1:A4xDbljILXROh+kObIiy5kIaPYD8e96x1tgBhUI5J+Y=
-github.com/gobwas/glob v0.2.3/go.mod h1:d3Ez4x06l9bZtSvzIay5+Yzi0fmZzPgnTbPcKjJAkT8=
-github.com/mattn/go-colorable v0.1.13 h1:fFA4WZxdEF4tXPZVKMLwD8oUnCTTo08duU7wxecdEvA=
-github.com/mattn/go-colorable v0.1.13/go.mod h1:7S9/ev0klgBDR4GtXTXX8a3vIGJpMovkB8vQcUbaXHg=
-github.com/mattn/go-isatty v0.0.16/go.mod h1:kYGgaQfpe5nmfYZH+SKPsOc2e4SrIfOl2e/yFXSvRLM=
-github.com/mattn/go-isatty v0.0.20 h1:xfD0iDuEKnDkl03q4limB+vH+GxLEtL/jb4xVJSWWEY=
-github.com/mattn/go-isatty v0.0.20/go.mod h1:W+V8PltTTMOvKvAeJH7IuucS94S2C6jfK/D7dTCTo3Y=
-golang.org/x/sys v0.0.0-20220811171246-fbc7d0a398ab/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
-golang.org/x/sys v0.6.0/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
-golang.org/x/sys v0.25.0 h1:r+8e+loiHxRqhXVl6ML1nO3l1+oFoWbnlu2Ehimmi34=
-golang.org/x/sys v0.25.0/go.mod h1:/VUhepiaJMQUp4+oa/7Zr1D23ma6VTLIYjOOTFZPUcA=
-
 
 --- File: internal/output.go
 package internal
@@ -85,7 +244,7 @@ func GenerateOutput(paths []PathInfo, registry *parser.Registry, opts OutputOpti
 	output := fmt.Sprintf("## Generated with Amalgo at: %s\n\n", FormatTimestamp())
 
 	if !opts.NoTree {
-		output += generateTree(paths)
+		output += fmt.Sprintf("## File Tree\n\n%s\n", GenerateTree(paths))
 	}
 
 	if opts.Outline {
@@ -229,11 +388,6 @@ func dumpFiles(paths []PathInfo, skipBinary bool) (string, error) {
 		)
 	}
 	return sb.String(), nil
-}
-
-func generateTree(paths []PathInfo) string {
-	tree := GenerateTree(paths)
-	return fmt.Sprintf("## File Tree\n\n%s\n", tree)
 }
 
 
@@ -808,6 +962,31 @@ type PathInfo struct {
 	RelativePath string
 	Depth        int
 	IsDir        bool
+
+	// matchReason tracks why this path was included
+	matchReason matchReason
+}
+
+type matchReason int
+
+const (
+	noMatch         matchReason = iota
+	directMatch                 // Path matches pattern directly
+	potentialParent             // Directory that might contain matches
+)
+
+// patternMatcher pairs a glob matcher with its original pattern string
+type patternMatcher struct {
+	pattern string
+	matcher glob.Glob
+}
+
+func (pm *patternMatcher) Match(value string) bool {
+	return pm.matcher.Match(value)
+}
+
+func (pm *patternMatcher) String() string {
+	return pm.pattern
 }
 
 // TraverseDirectories traverses directories and collects path information
@@ -822,7 +1001,10 @@ func TraverseDirectories(directories []string, includePatterns []string, exclude
 		return nil, fmt.Errorf("creating exclude pattern matchers: %w", err)
 	}
 
-	var paths []PathInfo
+	var confirmedPaths []PathInfo
+	var potentialPaths []PathInfo
+	directoryHasMatches := make(map[string]struct{})
+
 	for _, dir := range directories {
 		basePath, err := filepath.Abs(dir)
 		if err != nil {
@@ -847,12 +1029,13 @@ func TraverseDirectories(directories []string, includePatterns []string, exclude
 
 		// Add base directory if it matches patterns
 		baseRelPath := filepath.Base(basePath)
-		if shouldIncludePath(baseRelPath, true, includeMatchers, excludeMatchers) {
-			paths = append(paths, PathInfo{
+		if include, reason := shouldIncludePath(baseRelPath, true, includeMatchers, excludeMatchers); include {
+			confirmedPaths = append(confirmedPaths, PathInfo{
 				Path:         basePath,
 				RelativePath: baseRelPath,
 				Depth:        1,
 				IsDir:        true,
+				matchReason:  reason,
 			})
 		}
 
@@ -877,7 +1060,8 @@ func TraverseDirectories(directories []string, includePatterns []string, exclude
 			isDir := d.IsDir()
 
 			// Check if path should be included based on patterns
-			if !shouldIncludePath(relPath, isDir, includeMatchers, excludeMatchers) {
+			include, reason := shouldIncludePath(relPath, isDir, includeMatchers, excludeMatchers)
+			if !include {
 				if isDir {
 					return filepath.SkipDir
 				}
@@ -885,56 +1069,393 @@ func TraverseDirectories(directories []string, includePatterns []string, exclude
 			}
 
 			depth := strings.Count(relPath, "/") + 1
-
-			paths = append(paths, PathInfo{
+			info := PathInfo{
 				Path:         path,
 				RelativePath: relPath,
 				Depth:        depth,
 				IsDir:        isDir,
-			})
+				matchReason:  reason,
+			}
 
+			if !isDir || reason == directMatch {
+				confirmedPaths = append(confirmedPaths, info)
+
+				dir := filepath.Dir(info.RelativePath)
+				for dir != "." && dir != "/" {
+					directoryHasMatches[dir] = struct{}{}
+					dir = filepath.Dir(dir)
+				}
+				directoryHasMatches["."] = struct{}{}
+			} else {
+				potentialPaths = append(potentialPaths, info)
+			}
 			return nil
 		})
-
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	return paths, nil
+	if len(confirmedPaths) > 0 {
+		// Add directories that contain matches
+		for _, p := range potentialPaths {
+			if p.IsDir && p.matchReason == potentialParent {
+				if _, found := directoryHasMatches[p.RelativePath]; found {
+					confirmedPaths = append(confirmedPaths, p)
+				}
+			}
+		}
+	}
+	return confirmedPaths, nil
 }
 
 // shouldIncludePath determines if a path should be included based on the patterns
-func shouldIncludePath(path string, isDir bool, includeMatchers, excludeMatchers []glob.Glob) bool {
+func shouldIncludePath(path string, isDir bool, includeMatchers, excludeMatchers []patternMatcher) (bool, matchReason) {
 	// Append trailing slash for directories to match directory-specific patterns
 	if isDir {
-		path = path + "/"
+		path += "/"
+	}
+	paths := []string{path}
+
+	// If the path doesn't contain a directory separator, also try matching it
+	// with an implicit ./ prefix to handle root-level files with **/ patterns
+	if !strings.Contains(path, "/") {
+		paths = append(paths, "./"+path)
 	}
 
 	for _, matcher := range excludeMatchers {
-		if matcher.Match(path) {
-			return false
+		for _, p := range paths {
+			if matcher.Match(p) {
+				return false, noMatch
+			}
 		}
 	}
 
 	for _, matcher := range includeMatchers {
-		if matcher.Match(path) {
+		for _, p := range paths {
+			if matcher.Match(p) {
+				return true, directMatch
+			}
+		}
+	}
+
+	// Even if directory doesn't match directly, check if it could contain matching files
+	isMatch := isDir && couldContainMatches(path, includeMatchers)
+	if isMatch {
+		return isMatch, potentialParent
+	}
+	return false, noMatch
+}
+
+// couldContainMatches checks if a directory could potentially contain files that match the patterns
+func couldContainMatches(dirPath string, includeMatchers []patternMatcher) bool {
+	dirPath = strings.TrimSuffix(dirPath, "/")
+
+	// If the directory path itself matches any pattern, it could contain matches
+	for _, matcher := range includeMatchers {
+		pattern := matcher.String()
+
+		// If pattern is just checking file extension or name (no directories),
+		// then any directory could contain matching files
+		if !strings.Contains(pattern, "/") {
 			return true
+		}
+
+		// If pattern uses **, any directory could contain matches
+		if strings.Contains(pattern, "**") {
+			return true
+		}
+
+		// For patterns with explicit directory structure, check if this directory
+		// is a potential parent of matching files
+		parts := strings.Split(pattern, "/")
+		dirParts := strings.Split(dirPath, "/")
+
+		// If directory path is shorter than pattern, it could contain matches
+		if len(dirParts) < len(parts) {
+			prefixMatches := true
+			for i := range dirParts {
+				if parts[i] != dirParts[i] && parts[i] != "*" {
+					prefixMatches = false
+					break
+				}
+			}
+			if prefixMatches {
+				return true
+			}
 		}
 	}
 	return false
 }
 
-func createPatternMatchers(patterns []string) ([]glob.Glob, error) {
-	matchers := make([]glob.Glob, len(patterns))
+func createPatternMatchers(patterns []string) ([]patternMatcher, error) {
+	matchers := make([]patternMatcher, len(patterns))
 	for i, pattern := range patterns {
 		g, err := glob.Compile(pattern)
 		if err != nil {
 			return nil, fmt.Errorf("invalid pattern '%s': %w", pattern, err)
 		}
-		matchers[i] = g
+		matchers[i] = patternMatcher{
+			pattern: pattern,
+			matcher: g,
+		}
 	}
 	return matchers, nil
+}
+
+
+--- File: internal/traverse_test.go
+package internal
+
+import (
+	"strings"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func TestShouldIncludePath(t *testing.T) {
+	tests := map[string]struct {
+		path           string
+		isDir          bool
+		includePattern string
+		excludePattern string
+		wantInclude    bool
+		wantReason     matchReason
+	}{
+		// Original test cases
+		"root go file with no patterns": {
+			path:           "main.go",
+			isDir:          false,
+			includePattern: "",
+			excludePattern: "",
+			wantInclude:    false,
+			wantReason:     noMatch,
+		},
+		"nested go file with no patterns": {
+			path:           "internal/parser/parser.go",
+			isDir:          false,
+			includePattern: "",
+			excludePattern: "",
+			wantInclude:    false,
+			wantReason:     noMatch,
+		},
+		"root go file with simple pattern": {
+			path:           "main.go",
+			isDir:          false,
+			includePattern: "*.go",
+			excludePattern: "",
+			wantInclude:    true,
+			wantReason:     directMatch,
+		},
+		"nested go file with simple pattern": {
+			path:           "internal/parser/parser.go",
+			isDir:          false,
+			includePattern: "*.go",
+			excludePattern: "",
+			wantInclude:    true,
+			wantReason:     directMatch,
+		},
+		"root go file with double-star pattern": {
+			path:           "main.go",
+			isDir:          false,
+			includePattern: "**/*.go",
+			excludePattern: "",
+			wantInclude:    true,
+			wantReason:     directMatch,
+		},
+		"nested go file with double-star pattern": {
+			path:           "internal/parser/parser.go",
+			isDir:          false,
+			includePattern: "**/*.go",
+			excludePattern: "",
+			wantInclude:    true,
+			wantReason:     directMatch,
+		},
+
+		// New test cases for directory handling
+		"directory with potential go files": {
+			path:           "src",
+			isDir:          true,
+			includePattern: "**/*.go",
+			excludePattern: "",
+			wantInclude:    true,
+			wantReason:     potentialParent,
+		},
+		"nested directory with potential go files": {
+			path:           "src/utils",
+			isDir:          true,
+			includePattern: "**/*.go",
+			excludePattern: "",
+			wantInclude:    true,
+			wantReason:     potentialParent,
+		},
+		"excluded directory": {
+			path:           "vendor",
+			isDir:          true,
+			includePattern: "**/*.go",
+			excludePattern: "vendor/**",
+			wantInclude:    false,
+			wantReason:     noMatch,
+		},
+		"nested excluded directory": {
+			path:           "vendor/pkg",
+			isDir:          true,
+			includePattern: "**/*.go",
+			excludePattern: "vendor/**",
+			wantInclude:    false,
+			wantReason:     noMatch,
+		},
+		"file in excluded directory": {
+			path:           "vendor/pkg/main.go",
+			isDir:          false,
+			includePattern: "**/*.go",
+			excludePattern: "vendor/**",
+			wantInclude:    false,
+			wantReason:     noMatch,
+		},
+
+		// Tests for specific directory patterns
+		"directory matching specific pattern": {
+			path:           "internal",
+			isDir:          true,
+			includePattern: "internal/*.go",
+			excludePattern: "",
+			wantInclude:    true,
+			wantReason:     potentialParent,
+		},
+		"non-matching directory with specific pattern": {
+			path:           "pkg",
+			isDir:          true,
+			includePattern: "internal/*.go",
+			excludePattern: "",
+			wantInclude:    false,
+			wantReason:     noMatch,
+		},
+
+		// Tests for multiple patterns
+		"file matching one of multiple patterns": {
+			path:           "main.go",
+			isDir:          false,
+			includePattern: "*.txt,*.go",
+			excludePattern: "",
+			wantInclude:    true,
+			wantReason:     directMatch,
+		},
+		"file not matching any of multiple patterns": {
+			path:           "main.rs",
+			isDir:          false,
+			includePattern: "*.txt,*.go",
+			excludePattern: "",
+			wantInclude:    false,
+			wantReason:     noMatch,
+		},
+
+		// Edge cases
+		"root directory with double-star": {
+			path:           ".",
+			isDir:          true,
+			includePattern: "**/*.go",
+			excludePattern: "",
+			wantInclude:    true,
+			wantReason:     potentialParent,
+		},
+		"empty path": {
+			path:           "",
+			isDir:          true,
+			includePattern: "**/*.go",
+			excludePattern: "",
+			wantInclude:    true,
+			wantReason:     potentialParent,
+		},
+		"path with special characters": {
+			path:           "test[1].go",
+			isDir:          false,
+			includePattern: "*.go",
+			excludePattern: "",
+			wantInclude:    true,
+			wantReason:     directMatch,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			var includeMatchers []patternMatcher
+			var excludeMatchers []patternMatcher
+			var err error
+
+			if tt.includePattern != "" {
+				includeMatchers, err = createPatternMatchers(strings.Split(tt.includePattern, ","))
+				require.NoError(t, err)
+			}
+			if tt.excludePattern != "" {
+				excludeMatchers, err = createPatternMatchers(strings.Split(tt.excludePattern, ","))
+				require.NoError(t, err)
+			}
+
+			gotInclude, gotReason := shouldIncludePath(tt.path, tt.isDir, includeMatchers, excludeMatchers)
+			assert.Equal(t, tt.wantInclude, gotInclude, "path: %s, include: %s, exclude: %s",
+				tt.path, tt.includePattern, tt.excludePattern)
+			assert.Equal(t, tt.wantReason, gotReason, "path: %s, include: %s, exclude: %s",
+				tt.path, tt.includePattern, tt.excludePattern)
+		})
+	}
+}
+
+func TestCouldContainMatches(t *testing.T) {
+	tests := map[string]struct {
+		dirPath string
+		pattern string
+		want    bool
+	}{
+		"simple top-level pattern": {
+			dirPath: "internal",
+			pattern: "internal/*.go",
+			want:    true,
+		},
+		"nested directory pattern": {
+			dirPath: "src/internal",
+			pattern: "src/internal/*.go",
+			want:    true,
+		},
+		"non-matching directory": {
+			dirPath: "src/other",
+			pattern: "src/internal/*.go",
+			want:    false,
+		},
+		"wildcard in directory": {
+			dirPath: "src/v1/internal",
+			pattern: "src/*/internal/*.go",
+			want:    true,
+		},
+		"partial directory match": {
+			dirPath: "src",
+			pattern: "src/internal/*.go",
+			want:    true,
+		},
+		"exact file pattern": {
+			dirPath: "src",
+			pattern: "src/main.go",
+			want:    true,
+		},
+		"deep directory structure": {
+			dirPath: "src/v1/internal/pkg",
+			pattern: "src/**/internal/**/*.go",
+			want:    true,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			matchers, err := createPatternMatchers([]string{tt.pattern})
+			require.NoError(t, err)
+
+			got := couldContainMatches(tt.dirPath, matchers)
+			assert.Equal(t, tt.want, got,
+				"directory: %s, pattern: %s", tt.dirPath, tt.pattern)
+		})
+	}
 }
 
 
@@ -984,6 +1505,10 @@ func IsBinaryFile(path string) (bool, error) {
 
 // GenerateTree creates a textual representation of the directory structure
 func GenerateTree(paths []PathInfo) string {
+	if len(paths) == 0 {
+		return "< no paths found >\n"
+	}
+
 	mapPathToChildren := make(map[string][]PathInfo)
 	for _, path := range paths {
 		if path.Depth == 0 {
@@ -1065,7 +1590,7 @@ import (
 
 const (
 	appName = "amalgo"
-	version = "0.2.0"
+	version = "0.3.0"
 )
 
 func main() {
