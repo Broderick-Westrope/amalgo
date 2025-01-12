@@ -33,7 +33,7 @@ func GenerateOutput(paths []PathInfo, registry *parser.Registry, opts OutputOpti
 	output := fmt.Sprintf("## Generated with Amalgo at: %s\n\n", FormatTimestamp())
 
 	if !opts.NoTree {
-		output += generateTree(paths)
+		output += fmt.Sprintf("## File Tree\n\n%s\n", GenerateTree(paths))
 	}
 
 	if opts.Outline {
@@ -177,9 +177,4 @@ func dumpFiles(paths []PathInfo, skipBinary bool) (string, error) {
 		)
 	}
 	return sb.String(), nil
-}
-
-func generateTree(paths []PathInfo) string {
-	tree := GenerateTree(paths)
-	return fmt.Sprintf("## File Tree\n\n%s\n", tree)
 }
