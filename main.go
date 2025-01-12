@@ -24,9 +24,6 @@ func main() {
 		kong.Name(appName),
 		kong.Description("Create consolidated snapshots of source code for analysis, documentation, and sharing with LLMs."),
 		kong.UsageOnError(),
-		kong.ConfigureHelp(kong.HelpOptions{
-			Compact: true,
-		}),
 		kong.DefaultEnvars(appName),
 		kong.Vars{
 			"version": string(cli.Version),
@@ -37,19 +34,19 @@ func main() {
 
 type RootCmd struct {
 	// Default command args and flags
-	Dirs          []string              `arg:"" optional:"" help:"Directories to analyze. If a file is provided the parent directory will be used." type:"path" default:"."`
-	Output        string                `help:"Output file path." short:"o" type:"path" placeholder:"amalgo.txt"`
-	Stdout        bool                  `help:"Write output to stdout instead of file."`
-	Filter        []string              `help:"Glob patterns to filter by. Prefixing a pattern with '!' makes it an exclude pattern. The default patterns include everything except hidden files and folders. (e.g. '*.go,*.{js,ts}' OR '!.md')" short:"f" default:"*,!.*"`
-	NoTree        bool                  `help:"Skip directory tree generation." default:"false"`
-	NoDump        bool                  `help:"Skip file content dumping." default:"false"`
-	Outline       bool                  `help:"Generate language-specific outlines." default:"false"`
-	NoColor       bool                  `help:"Don't use color in the terminal output." default:"false"`
-	IncludeBinary bool                  `help:"Include binary files." default:"false"`
-	Format        internal.OutputFormat `help:"Format the output using an alternate method. This will change the file extension of the default output file." enum:"default,json" default:"default"`
+	Dirs          []string              `arg:"" optional:"" help:"Directories to analyze. If a file is provided it's parent directory will be used." type:"path" default:"."`
+	Output        string                `help:"Specifies the destination path for the output file. The file extension will automatically adjust based on the selected format (see '--format')." short:"o" type:"path" placeholder:"amalgo.txt"`
+	Stdout        bool                  `help:"Redirects all output to standard output (terminal) instead of writing to a file. Useful for piping output to other commands."`
+	Filter        []string              `help:"Controls which files are processed using glob patterns. Include patterns are processed first, then exclude patterns (prefixed with '!'). Hidden files and directories are excluded by default." short:"f" default:"*,!.*"`
+	NoTree        bool                  `help:"Skips the inclusion of the file tree in the output." default:"false"`
+	NoDump        bool                  `help:"Skips the inclusion of file contents in the output." default:"false"`
+	Outline       bool                  `help:"Includes in the output a language-aware outline of code files, showing functions, classes, and other significant elements. Only available for specific file extensions: '.go'." default:"false"`
+	NoColor       bool                  `help:"Disables ANSI color codes in the output." default:"false"`
+	IncludeBinary bool                  `help:"Processes binary files instead of skipping them. Use with caution as this may produce large or unreadable output." default:"false"`
+	Format        internal.OutputFormat `help:"Selects an alternative output format. This affects both the structure and the file extension of the output. Options: 'default', 'json'." enum:"default,json" default:"default"`
 
 	// Subcommands
-	Version versionFlag `help:"Print version information and quit" short:"v" name:"version"`
+	Version versionFlag `help:"Displays the current version of the tool and exits immediately." short:"v" name:"version"`
 }
 
 func (c *RootCmd) validate() bool {

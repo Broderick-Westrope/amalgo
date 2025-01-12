@@ -1,7 +1,7 @@
 # Amalgo
 
-[![Go Version](https://img.shields.io/badge/Go-1.23+-00ADD8?style=flat&logo=go)](https://go.dev/doc/install)
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Go Version](https://img.shields.io/badge/Go-1.23-00ADD8?style=flat&logo=go)](https://go.dev/doc/install)
+[![License](https://img.shields.io/badge/license-GNU%20GPLv3-blue.svg)](https://github.com/Broderick-Westrope/amalgo/blob/main/LICENSE)
 
 Amalgo is a command-line tool that creates consolidated snapshots (ie. an amalgamation) of source code for analysis, documentation, and sharing with [LLMs](https://en.wikipedia.org/wiki/Large_language_model). It helps developers gather and organize their codebase into a single, well-structured document.
 
@@ -31,92 +31,104 @@ go install github.com/Broderick-Westrope/amalgo@latest
 
 ## Usage
 
-Basic usage:
+Use the help flag to get more information on usage:
 
 ```bash
-amalgo [flags] [directories...]
+amalgo --help
 ```
 
 Example commands:
 
 ```bash
-# Analyze current directory
+# Analyze current directory, excluding hidden files and directories by default
 amalgo
 
 # Analyze specific directories
-amalgo ./src ./lib
+amalgo internal/ .vscode/
 
 # Output to a specific file
-amalgo -o output.txt ./src
+amalgo -o output.txt
 
 # Print output to stdout
-amalgo --stdout ./src
+amalgo --stdout
 
-# Include only specific file types
-amalgo -f "*.go" -f "*.js" ./src
+# Include only specific file types (eg. Go and Markdown files, but not Go tests or hidden files/directories)
+amalgo -f '**/*.{go,md},!**/*_test.go,!.*'
 
-# Ignore certain directories
-amalgo -i node_modules -i .git ./src
+# Exclude certain directories (eg. include everything except the .git directory)
+amalgo -f '!.git/'
 
-# Generate only the outline
-amalgo --no-tree --no-dump --outline ./src
+# Include hidden files and directories
+amalgo -f '*'
 
-# Include hidden files
-amalgo --include-hidden ./src
+# Generate only the language-specific outline
+amalgo --no-tree --no-dump --outline
 ```
+
+### Positional Arguments
+
+- `dirs`
+  - **Description:** Directories to analyze. If a file is provided it's parent directory will be used.
+  - **Optional:** `true`
 
 ### Flags
 
-| Flag | Description | Default |
-|------|-------------|---------|
-| `-o, --output` | Output file path | `amalgo.txt` |
-| `--stdout` | Write output to stdout instead of file | `false` |
-| `-i, --ignore-dirs` | Directories to ignore | `[]` |
-| `-f, --filter` | File patterns to include (e.g., '*.go', '*.{js,ts}') | `["*"]` |
-| `--include-hidden` | Include hidden files and directories | `false` |
-| `--no-tree` | Skip directory tree generation | `false` |
-| `--no-dump` | Skip file content dumping | `false` |
-| `--outline` | Generate language-specific outlines | `false` |
-| `--no-color` | Don't use color in the terminal output | `false` |
-| `--include-binary` | Include binary files | `false` |
-| `-v, --version` | Print version information and quit | |
+- `-o, --output`
+  - **Description:** Specifies the destination path for the output file. The file extension will automatically adjust based on the selected format (see `--format`).
+  - **Default:** `amalgo.txt`
+  - **Environment Variable:** `$AMALGO_OUTPUT`
+
+- `stdout`
+  - **Description:** Redirects all output to standard output (terminal) instead of writing to a file. Useful for piping output to other commands.
+  - **Default:** `false`
+  - **Environment Variable:** `$AMALGO_STDOUT`
+
+- `-f, --filter`
+  - **Description:** Controls which files are processed using glob patterns. Include patterns are processed first, then exclude patterns (prefixed with `!`). Hidden files and directories are excluded by default.
+  - **Default:** `*,!.*`
+  - **Environment Variable:** `$AMALGO_FILTER`
+  - **Examples:**
+    - `*.go,*.{js,ts}` - Include only Go, JavaScript, and TypeScript files.
+    - `*,!*.md` - Include everything except Markdown files.
+
+- `--no-tree`
+  - **Description:** Skips the inclusion of the file tree in the output.
+  - **Default:** `false`
+  - **Environment Variable:** `$AMALGO_NO_TREE`
+
+- `--no-dump`
+  - **Description:** Skips the inclusion of file contents in the output.
+  - **Default:** `false`
+  - **Environment Variable:** `$AMALGO_NO_DUMP`
+
+- `--outline`
+  - **Description:** Includes in the output a language-aware outline of code files, showing functions, classes, and other significant elements. Only available for specific file extensions: `.go`.
+  - **Default:** `false`
+  - **Environment Variable:** `$AMALGO_OUTLINE`
+
+- `--no-color`
+  - **Description:** Disables ANSI color codes in the output.
+  - **Default:** `false`
+  - **Environment Variable:** `$AMALGO_NO_COLOR`
+
+- `--include-binary`
+  - **Description:** Processes binary files instead of skipping them. Use with caution as this may produce large or unreadable output.
+  - **Default:** `false`
+  - **Environment Variable:** `$AMALGO_INCLUDE_BINARY`
+
+- `--format`
+  - **Description:** Selects an alternative output format. This affects both the structure and the file extension of the output. Options: `default`, `json`.
+  - **Default:** `"default"`
+  - **Environment Variable:** `$AMALGO_FORMAT`
+
+- `-v, --version`
+  - **Description:** Displays the current version of the tool and exits immediately.
+  - **Default:** `false`
+  - **Environment Variable:** `$AMALGO_VERSION`
 
 ## Output Format
 
-The generated output file includes:
-
-1. **Header**: Timestamp and generation information
-2. **Directory Tree**: Visual representation of the project structure (unless `--no-tree` is specified)
-3. **Language-Specific Outlines**: Structural analysis of supported source files (if `--outline` is specified)
-4. **File Contents**: Complete source code of all included files (unless `--no-dump` is specified)
-
-Example output:
-
-```
-## Generated with Amalgo at: 2025-01-11 22:49:36
-
-Directory Tree
-└── project/
-    ├── main.go
-    ├── internal/
-    │   ├── cli/
-    │   │   └── cli.go
-    │   └── utils/
-    │       └── utils.go
-
-## Language-Specific Outlines
-
-### File: main.go
-FUNCTION: main()
-  Documentation:
-    Entry point for the application
-
-## File Contents
-
---- File: main.go
-package main
-...
-```
+Examples of each output format can be found in [examples/formats/](https://github.com/Broderick-Westrope/amalgo/tree/main/examples/formats).
 
 ## Example Use Cases
 
