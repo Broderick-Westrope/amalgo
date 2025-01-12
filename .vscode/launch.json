@@ -16,5 +16,16 @@
                 "--no-dump"
             ]
         },
+        {
+            "name": "Specific Test Case",
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",
+            "program": "${workspaceFolder}/internal",
+            "args": [
+                "-test.run",
+                "TestShouldIncludePath/directory_matching_specific_pattern"
+            ]
+        },
     ]
 }
