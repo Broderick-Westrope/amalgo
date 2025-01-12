@@ -1,0 +1,99 @@
+version: 2
+project_name: amalgo
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - windows
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    mod_timestamp: "{{ .CommitTimestamp }}"
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+
+archives:
+  - format: tar.gz
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end }}
+    format_overrides:
+      - goos: windows
+        format: zip
+
+checksum:
+  name_template: "checksums.txt"
+
+changelog:
+  sort: asc
+  use: github
+  groups:
+    - title: Features
+      regexp: "^.*feat[(\\w)]*:+.*$"
+      order: 0
+    - title: "Bug fixes"
+      regexp: "^.*fix[(\\w)]*:+.*$"
+      order: 1
+    - title: Others
+      order: 999
+  filters:
+    exclude:
+      - "^docs"
+      - "^test"
+      - "^ci"
+      - "^chore"
+      - "README"
+      - Merge pull request
+      - Merge branch
+
+brews:
+  - repository:
+      owner: Broderick-Westrope
+      name: homebrew-tap
+      token: "{{ .Env.GITHUB_TOKEN }}"
+
+    url_template: "https://github.com/Broderick-Westrope/amalgo/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
+
+    commit_author:
+      name: goreleaserbot
+      email: bot@goreleaser.com
+
+    commit_msg_template: "Brew formula update for {{ .ProjectName }} version {{ .Tag }}"
+
+    homepage: "https://github.com/Broderick-Westrope/amalgo"
+    description: "Create consolidated snapshots of source code for analysis, documentation, and sharing with LLMs."
+    license: "GNU GPLv3"
+
+    test: |
+      system "#{bin}/amalgo --version"
+
+    install: |
+      bin.install "amalgo"
+
+release:
+  github:
+    owner: Broderick-Westrope
+    name: amalgo
+  draft: false
+  prerelease: auto
+  mode: replace
+  header: |
+    ## {{ .Tag }} ({{ .Date }})
+
+    Welcome to this new release!

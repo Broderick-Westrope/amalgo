@@ -1,4 +1,4 @@
-# Amalgo
+# amalgo
 
 [![Go Version](https://img.shields.io/badge/Go-1.23-00ADD8?style=flat&logo=go)](https://go.dev/doc/install)
 [![License](https://img.shields.io/badge/license-GNU%20GPLv3-blue.svg)](https://github.com/Broderick-Westrope/amalgo/blob/main/LICENSE)
