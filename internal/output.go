@@ -43,7 +43,7 @@ func GenerateOutput(paths []PathInfo, registry *parser.Registry, opts OutputOpti
 }
 
 func generateOutlines(paths []PathInfo, registry *parser.Registry) (string, error) {
-	output := "\n## Language-Specific Outlines\n\n"
+	output := "## Language-Specific Outlines\n\n"
 
 	var temp string
 	var err error
@@ -132,7 +132,7 @@ func writeSymbols(symbols []*parser.Symbol, depth int) (string, error) {
 
 func dumpFiles(paths []PathInfo, skipBinary bool) (string, error) {
 	var sb strings.Builder
-	sb.WriteString("\n## File Contents\n\n")
+	sb.WriteString("## File Contents\n\n")
 
 	for _, path := range paths {
 		if path.IsDir {
@@ -169,5 +169,5 @@ func dumpFiles(paths []PathInfo, skipBinary bool) (string, error) {
 
 func generateTree(paths []PathInfo) string {
 	tree := GenerateTree(paths)
-	return fmt.Sprintf("\n## File Tree\n\n%s\n", tree)
+	return fmt.Sprintf("## File Tree\n\n%s\n", tree)
 }
