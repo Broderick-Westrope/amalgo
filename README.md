@@ -26,8 +26,14 @@ Amalgo is a command-line tool that creates consolidated snapshots (ie. an amalga
 ## Installation
 
 ```bash
+# Using Homebrew
+brew install Broderick-Westrope/tap/amalgo
+
+# Using Go install
 go install github.com/Broderick-Westrope/amalgo@latest
 ```
+
+You can also find various builds on [the releases page](https://github.com/Broderick-Westrope/amalgo/releases).
 
 ## Usage
 
