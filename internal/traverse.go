@@ -16,7 +16,18 @@ type PathInfo struct {
 	RelativePath string
 	Depth        int
 	IsDir        bool
+
+	// matchReason tracks why this path was included
+	matchReason matchReason
 }
+
+type matchReason int
+
+const (
+	noMatch         matchReason = iota
+	directMatch                 // Path matches pattern directly
+	potentialParent             // Directory that might contain matches
+)
 
 // patternMatcher pairs a glob matcher with its original pattern string
 type patternMatcher struct {
@@ -44,7 +55,10 @@ func TraverseDirectories(directories []string, includePatterns []string, exclude
 		return nil, fmt.Errorf("creating exclude pattern matchers: %w", err)
 	}
 
-	var paths []PathInfo
+	var confirmedPaths []PathInfo
+	var potentialPaths []PathInfo
+	directoryHasMatches := make(map[string]struct{})
+
 	for _, dir := range directories {
 		basePath, err := filepath.Abs(dir)
 		if err != nil {
@@ -69,12 +83,13 @@ func TraverseDirectories(directories []string, includePatterns []string, exclude
 
 		// Add base directory if it matches patterns
 		baseRelPath := filepath.Base(basePath)
-		if shouldIncludePath(baseRelPath, true, includeMatchers, excludeMatchers) {
-			paths = append(paths, PathInfo{
+		if include, reason := shouldIncludePath(baseRelPath, true, includeMatchers, excludeMatchers); include {
+			confirmedPaths = append(confirmedPaths, PathInfo{
 				Path:         basePath,
 				RelativePath: baseRelPath,
 				Depth:        1,
 				IsDir:        true,
+				matchReason:  reason,
 			})
 		}
 
@@ -99,7 +114,8 @@ func TraverseDirectories(directories []string, includePatterns []string, exclude
 			isDir := d.IsDir()
 
 			// Check if path should be included based on patterns
-			if !shouldIncludePath(relPath, isDir, includeMatchers, excludeMatchers) {
+			include, reason := shouldIncludePath(relPath, isDir, includeMatchers, excludeMatchers)
+			if !include {
 				if isDir {
 					return filepath.SkipDir
 				}
@@ -107,27 +123,48 @@ func TraverseDirectories(directories []string, includePatterns []string, exclude
 			}
 
 			depth := strings.Count(relPath, "/") + 1
-
-			paths = append(paths, PathInfo{
+			info := PathInfo{
 				Path:         path,
 				RelativePath: relPath,
 				Depth:        depth,
 				IsDir:        isDir,
-			})
+				matchReason:  reason,
+			}
 
+			if !isDir || reason == directMatch {
+				confirmedPaths = append(confirmedPaths, info)
+
+				dir := filepath.Dir(info.RelativePath)
+				for dir != "." && dir != "/" {
+					directoryHasMatches[dir] = struct{}{}
+					dir = filepath.Dir(dir)
+				}
+				directoryHasMatches["."] = struct{}{}
+			} else {
+				potentialPaths = append(potentialPaths, info)
+			}
 			return nil
 		})
-
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	return filterValidPaths(paths, includeMatchers), nil
+	if len(confirmedPaths) > 0 {
+		// Add directories that contain matches
+		for _, p := range potentialPaths {
+			if p.IsDir && p.matchReason == potentialParent {
+				if _, found := directoryHasMatches[p.RelativePath]; found {
+					confirmedPaths = append(confirmedPaths, p)
+				}
+			}
+		}
+	}
+	return confirmedPaths, nil
 }
 
 // shouldIncludePath determines if a path should be included based on the patterns
-func shouldIncludePath(path string, isDir bool, includeMatchers, excludeMatchers []patternMatcher) bool {
+func shouldIncludePath(path string, isDir bool, includeMatchers, excludeMatchers []patternMatcher) (bool, matchReason) {
 	// Append trailing slash for directories to match directory-specific patterns
 	if isDir {
 		path += "/"
@@ -143,7 +180,7 @@ func shouldIncludePath(path string, isDir bool, includeMatchers, excludeMatchers
 	for _, matcher := range excludeMatchers {
 		for _, p := range paths {
 			if matcher.Match(p) {
-				return false
+				return false, noMatch
 			}
 		}
 	}
@@ -151,13 +188,17 @@ func shouldIncludePath(path string, isDir bool, includeMatchers, excludeMatchers
 	for _, matcher := range includeMatchers {
 		for _, p := range paths {
 			if matcher.Match(p) {
-				return true
+				return true, directMatch
 			}
 		}
 	}
 
 	// Even if directory doesn't match directly, check if it could contain matching files
-	return isDir && couldContainMatches(path, includeMatchers)
+	isMatch := isDir && couldContainMatches(path, includeMatchers)
+	if isMatch {
+		return isMatch, potentialParent
+	}
+	return false, noMatch
 }
 
 // couldContainMatches checks if a directory could potentially contain files that match the patterns
@@ -199,61 +240,6 @@ func couldContainMatches(dirPath string, includeMatchers []patternMatcher) bool 
 		}
 	}
 	return false
-}
-
-// filterValidPaths removes directories that don't match patterns and don't contain matching files
-func filterValidPaths(paths []PathInfo, includeMatchers []patternMatcher) []PathInfo {
-	// First, identify all directories that contain matching files
-	hasMatchingFile := make(map[string]bool)
-
-	// Process in reverse order so we handle deeper paths first
-	for i := len(paths) - 1; i >= 0; i-- {
-		path := paths[i]
-
-		if !path.IsDir {
-			// If it's a file and it's in our paths slice, it must have matched
-			dirPath := filepath.Dir(path.RelativePath)
-			for dirPath != "." && dirPath != "/" {
-				hasMatchingFile[dirPath] = true
-				dirPath = filepath.Dir(dirPath)
-			}
-			hasMatchingFile["."] = true // Root directory
-		}
-	}
-
-	// Filter the paths
-	validPaths := make([]PathInfo, 0, len(paths))
-	for _, path := range paths {
-		if !path.IsDir {
-			// Files in our slice have already been verified to match
-			validPaths = append(validPaths, path)
-			continue
-		}
-
-		// For directories, check if they match directly or contain matching files
-		dirPath := path.RelativePath
-		if dirPath == "." {
-			dirPath = ""
-		}
-
-		matches := false
-		// Check if directory matches patterns directly
-		for _, matcher := range includeMatchers {
-			if matcher.Match(dirPath + "/") {
-				matches = true
-				break
-			}
-		}
-
-		// If directory doesn't match directly, check if it contains matching files
-		if !matches && !hasMatchingFile[dirPath] {
-			continue
-		}
-
-		validPaths = append(validPaths, path)
-	}
-
-	return validPaths
 }
 
 func createPatternMatchers(patterns []string) ([]patternMatcher, error) {
