@@ -43,6 +43,10 @@ func IsBinaryFile(path string) (bool, error) {
 
 // GenerateTree creates a textual representation of the directory structure
 func GenerateTree(paths []PathInfo) string {
+	if len(paths) == 0 {
+		return "< no paths found >\n"
+	}
+
 	mapPathToChildren := make(map[string][]PathInfo)
 	for _, path := range paths {
 		if path.Depth == 0 {
