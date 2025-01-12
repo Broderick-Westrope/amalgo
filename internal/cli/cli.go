@@ -7,6 +7,7 @@ import (
 	"github.com/Broderick-Westrope/amalgo/internal/output"
 	"github.com/Broderick-Westrope/amalgo/internal/parser"
 	"github.com/Broderick-Westrope/amalgo/internal/traverse"
+	"github.com/Broderick-Westrope/amalgo/internal/utils"
 	"github.com/alecthomas/kong"
 	"github.com/fatih/color"
 )
@@ -19,12 +20,10 @@ func New(version string) *RootCmd {
 
 type RootCmd struct {
 	// Default command args and flags
-	Dirs          []string `arg:"" optional:"" help:"Directories to analyze." type:"path" default:"."`
+	Dirs          []string `arg:"" optional:"" help:"Directories to analyze. If a file is provided the parent directory will be used." type:"path" default:"."`
 	Output        string   `help:"Output file path." short:"o" type:"path" default:"amalgo.txt"`
 	Stdout        bool     `help:"Write output to stdout instead of file."`
-	IgnoreDirs    []string `help:"Directories to ignore." short:"i" placeholder:"DIR"`
-	Filter        []string `help:"File patterns to include and exclude (e.g. '*.go,*.{js,ts}', or '*,!.md')." short:"f" placeholder:"PATTERN" default:"*"`
-	IncludeHidden bool     `help:"Include hidden files and directories." default:"false"`
+	Filter        []string `help:"Glob patterns to filter by. Prefixing a pattern with '!' makes it an exclude pattern. The default patterns include everything except hidden files and folders. (e.g. '*.go,*.{js,ts}' OR '!.md')" short:"f" default:"*,!.*"`
 	NoTree        bool     `help:"Skip directory tree generation." default:"false"`
 	NoDump        bool     `help:"Skip file content dumping." default:"false"`
 	Outline       bool     `help:"Generate language-specific outlines." default:"false"`
@@ -81,12 +80,13 @@ func (c *RootCmd) Run() error {
 			includePatterns = append(includePatterns, original)
 		}
 	}
+	if len(includePatterns) == 0 {
+		includePatterns = []string{"*"}
+	}
 
 	traverseOpts := traverse.Options{
 		IncludePatterns: includePatterns,
 		ExcludePatterns: excludePatterns,
-		IncludeHidden:   c.IncludeHidden,
-		IgnoreDirs:      c.IgnoreDirs,
 	}
 
 	paths, err := traverse.GetPaths(c.Dirs, traverseOpts)
@@ -102,8 +102,14 @@ func (c *RootCmd) Run() error {
 	}
 
 	generator := output.NewGenerator(outputDest, registry)
-	if err := generator.Generate(paths, outputOpts); err != nil {
+	output, err := generator.Generate(paths, outputOpts)
+	if err != nil {
 		return fmt.Errorf("generating output: %w", err)
+	}
+
+	err = utils.WriteOutput(outputDest, output)
+	if err != nil {
+		return fmt.Errorf("writing output: %w", err)
 	}
 
 	// Print success message unless output is stdout.

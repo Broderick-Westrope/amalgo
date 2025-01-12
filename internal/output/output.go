@@ -25,33 +25,29 @@ func NewGenerator(output string, registry *parser.Registry) *Generator {
 }
 
 // Generate creates the complete output file
-func (g *Generator) Generate(paths []traverse.PathInfo, opts Options) error {
-	// Write header with timestamp
-	header := fmt.Sprintf("## Generated with Amalgo at: %s\n\n", utils.FormatTimestamp())
-	if err := utils.WriteOutput(g.output, header); err != nil {
-		return fmt.Errorf("failed to write header: %w", err)
-	}
+func (g *Generator) Generate(paths []traverse.PathInfo, opts Options) (string, error) {
+	output := fmt.Sprintf("## Generated with Amalgo at: %s\n\n", utils.FormatTimestamp())
 
 	if !opts.NoTree {
-		tree := utils.GenerateTree(paths)
-		if err := utils.AppendOutput(g.output, tree+"\n"); err != nil {
-			return fmt.Errorf("failed to write directory tree: %w", err)
-		}
+		output += g.generateTree(paths)
 	}
 
 	if opts.Outline {
-		if err := g.generateOutlines(paths); err != nil {
-			return fmt.Errorf("failed to generate outlines: %w", err)
+		outlines, err := g.generateOutlines(paths)
+		if err != nil {
+			return "", fmt.Errorf("generating outlines: %w", err)
 		}
+		output += outlines
 	}
 
 	if !opts.NoDump {
-		if err := g.dumpFiles(paths, opts.SkipBinary); err != nil {
-			return fmt.Errorf("failed to dump files: %w", err)
+		filesDump, err := g.dumpFiles(paths, opts.SkipBinary)
+		if err != nil {
+			return "", fmt.Errorf("dumping files: %w", err)
 		}
+		output += filesDump
 	}
-
-	return nil
+	return output, nil
 }
 
 // Options configures the output generation
@@ -62,12 +58,11 @@ type Options struct {
 	SkipBinary bool
 }
 
-func (g *Generator) generateOutlines(paths []traverse.PathInfo) error {
-	content := "\n## Language-Specific Outlines\n\n"
-	if err := utils.AppendOutput(g.output, content); err != nil {
-		return err
-	}
+func (g *Generator) generateOutlines(paths []traverse.PathInfo) (string, error) {
+	output := "\n## Language-Specific Outlines\n\n"
 
+	var temp string
+	var err error
 	for _, path := range paths {
 		if path.IsDir {
 			continue
@@ -78,33 +73,29 @@ func (g *Generator) generateOutlines(paths []traverse.PathInfo) error {
 			continue
 		}
 
-		content := fmt.Sprintf("\n### File: %s\n", path.RelativePath)
-		if err := utils.AppendOutput(g.output, content); err != nil {
-			return err
+		temp, err = g.processFileOutline(path.Path)
+		if err != nil {
+			return "", fmt.Errorf("processing outline for %q: %w", path.Path, err)
 		}
-
-		if err := g.processFileOutline(path.Path); err != nil {
-			return fmt.Errorf("failed to process outline for %s: %w", path.Path, err)
-		}
+		output += fmt.Sprintf("\n### File: %s\n%s", path.RelativePath, temp)
 	}
-
-	return nil
+	return output, nil
 }
 
-func (g *Generator) processFileOutline(filePath string) error {
+func (g *Generator) processFileOutline(filePath string) (string, error) {
 	content, err := os.ReadFile(filePath)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	parser := g.registry.GetParser(filePath)
 	if parser == nil {
-		return fmt.Errorf("no parser found for %s", filePath)
+		return "", fmt.Errorf("no parser found for %q", filePath)
 	}
 
 	outline, err := parser.Parse(content, filePath)
 	if err != nil {
-		return err
+		return "", fmt.Errorf("parsing file %q: %w", filePath, err)
 	}
 
 	if len(outline.Errors) > 0 {
@@ -112,58 +103,52 @@ func (g *Generator) processFileOutline(filePath string) error {
 		for _, err := range outline.Errors {
 			errMsgs = append(errMsgs, err.Error())
 		}
-		content := fmt.Sprintf("Parsing errors:\n%s\n", strings.Join(errMsgs, "\n"))
-		return utils.AppendOutput(g.output, content)
+		return fmt.Sprintf("Parsing errors:\n%s\n", strings.Join(errMsgs, "\n")), nil
 	}
 
 	return g.writeSymbols(outline.Symbols, 0)
 }
 
-func (g *Generator) writeSymbols(symbols []*parser.Symbol, depth int) error {
+func (g *Generator) writeSymbols(symbols []*parser.Symbol, depth int) (string, error) {
 	indent := strings.Repeat("  ", depth)
-
+	var output string
 	for _, symbol := range symbols {
 		// Write symbol header
-		content := fmt.Sprintf("%s%s: %s", indent, strings.ToUpper(symbol.Type), symbol.Name)
+		output += fmt.Sprintf("%s%s: %s", indent, strings.ToUpper(symbol.Type), symbol.Name)
 		if symbol.Signature != "" {
-			content += fmt.Sprintf(" (%s)", symbol.Signature)
+			output += fmt.Sprintf(" (%s)", symbol.Signature)
 		}
-		content += "\n"
+		output += "\n"
 
 		// Write decorators if present
 		if len(symbol.Decorators) > 0 {
-			content += fmt.Sprintf("%s  Decorators: %s\n", indent, strings.Join(symbol.Decorators, ", "))
+			output += fmt.Sprintf("%s  Decorators: %s\n", indent, strings.Join(symbol.Decorators, ", "))
 		}
 
 		// Write docstring if present
 		if symbol.Docstring != "" {
 			docLines := strings.Split(strings.TrimSpace(symbol.Docstring), "\n")
-			content += fmt.Sprintf("%s  Documentation:\n", indent)
+			output += fmt.Sprintf("%s  Documentation:\n", indent)
 			for _, line := range docLines {
-				content += fmt.Sprintf("%s    %s\n", indent, line)
+				output += fmt.Sprintf("%s    %s\n", indent, line)
 			}
-		}
-
-		if err := utils.AppendOutput(g.output, content); err != nil {
-			return err
 		}
 
 		// Recursively write children
 		if len(symbol.Children) > 0 {
-			if err := g.writeSymbols(symbol.Children, depth+1); err != nil {
-				return err
+			temp, err := g.writeSymbols(symbol.Children, depth+1)
+			if err != nil {
+				return "", err
 			}
+			output += temp
 		}
 	}
-
-	return nil
+	return output, nil
 }
 
-func (g *Generator) dumpFiles(paths []traverse.PathInfo, skipBinary bool) error {
-	content := "\n## File Contents\n\n"
-	if err := utils.AppendOutput(g.output, content); err != nil {
-		return err
-	}
+func (g *Generator) dumpFiles(paths []traverse.PathInfo, skipBinary bool) (string, error) {
+	var sb strings.Builder
+	sb.WriteString("\n## File Contents\n\n")
 
 	for _, path := range paths {
 		if path.IsDir {
@@ -174,14 +159,13 @@ func (g *Generator) dumpFiles(paths []traverse.PathInfo, skipBinary bool) error 
 			// Check if file is binary
 			isBinary, err := utils.IsBinaryFile(path.Path)
 			if err != nil {
-				return fmt.Errorf("failed to check if file is binary: %w", err)
+				return "", fmt.Errorf("failed to check if file is binary: %w", err)
 			}
 
 			if isBinary {
-				content := fmt.Sprintf("--- File: %s\n<binary file>\n\n", path.RelativePath)
-				if err := utils.AppendOutput(g.output, content); err != nil {
-					return err
-				}
+				sb.WriteString(
+					fmt.Sprintf("--- File: %s\n<binary file>\n\n", path.RelativePath),
+				)
 				continue
 			}
 		}
@@ -189,14 +173,17 @@ func (g *Generator) dumpFiles(paths []traverse.PathInfo, skipBinary bool) error 
 		// Read and write file content
 		fileContent, err := os.ReadFile(path.Path)
 		if err != nil {
-			return fmt.Errorf("failed to read file %s: %w", path.Path, err)
+			return "", fmt.Errorf("failed to read file %s: %w", path.Path, err)
 		}
 
-		content := fmt.Sprintf("--- File: %s\n%s\n\n", path.RelativePath, string(fileContent))
-		if err := utils.AppendOutput(g.output, content); err != nil {
-			return err
-		}
+		sb.WriteString(
+			fmt.Sprintf("--- File: %s\n%s\n\n", path.RelativePath, string(fileContent)),
+		)
 	}
+	return sb.String(), nil
+}
 
-	return nil
+func (g *Generator) generateTree(paths []traverse.PathInfo) string {
+	tree := utils.GenerateTree(paths)
+	return fmt.Sprintf("\n## File Tree\n\n%s\n", tree)
 }

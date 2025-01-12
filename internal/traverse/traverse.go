@@ -20,26 +20,20 @@ type PathInfo struct {
 
 // Options configures the traversal behavior
 type Options struct {
-	IncludePatterns []string
-	ExcludePatterns []string
-	IncludeHidden   bool
-	IgnoreDirs      []string
+	IncludePatterns []string // Patterns for files/directories to include
+	ExcludePatterns []string // Patterns for files/directories to exclude
 }
 
 // GetPaths traverses directories and collects path information
 func GetPaths(directories []string, opts Options) ([]PathInfo, error) {
-	if len(directories) == 0 {
-		directories = []string{"."}
-	}
-
 	includeMatchers, err := createPatternMatchers(opts.IncludePatterns)
 	if err != nil {
-		return nil, fmt.Errorf("creating include pattern matchers")
+		return nil, fmt.Errorf("creating include pattern matchers: %w", err)
 	}
 
 	excludeMatchers, err := createPatternMatchers(opts.ExcludePatterns)
 	if err != nil {
-		return nil, fmt.Errorf("creating exclude pattern matchers")
+		return nil, fmt.Errorf("creating exclude pattern matchers: %w", err)
 	}
 
 	var paths []PathInfo
@@ -48,24 +42,27 @@ func GetPaths(directories []string, opts Options) ([]PathInfo, error) {
 		if err != nil {
 			return nil, err
 		}
+		basePath = filepath.Dir(basePath)
 
-		parentPath := filepath.Dir(basePath)
 		baseInfo, err := os.Stat(basePath)
 		if err != nil {
 			return nil, err
 		}
 
 		if !baseInfo.IsDir() {
-			continue
+			return nil, fmt.Errorf("expected base path %q to be a directory", basePath)
 		}
 
-		// Add base directory
-		paths = append(paths, PathInfo{
-			Path:         basePath,
-			RelativePath: filepath.ToSlash(filepath.Join(filepath.Base(parentPath), filepath.Base(basePath))),
-			Depth:        1,
-			IsDir:        true,
-		})
+		// Add base directory if it matches patterns
+		baseRelPath := filepath.ToSlash(filepath.Join(filepath.Base(basePath), filepath.Base(basePath)))
+		if shouldIncludePath(baseRelPath, true, includeMatchers, excludeMatchers) {
+			paths = append(paths, PathInfo{
+				Path:         basePath,
+				RelativePath: baseRelPath,
+				Depth:        1,
+				IsDir:        true,
+			})
+		}
 
 		// Walk the directory tree
 		err = filepath.WalkDir(basePath, func(path string, d fs.DirEntry, err error) error {
@@ -73,70 +70,33 @@ func GetPaths(directories []string, opts Options) ([]PathInfo, error) {
 				return err
 			}
 
-			// Skip the root directory as it's already added
+			// Skip the root directory as it's already processed
 			if path == basePath {
 				return nil
 			}
 
-			// Check if path should be ignored
-			for _, ignoreDir := range opts.IgnoreDirs {
-				ignorePath, err := filepath.Abs(ignoreDir)
-				if err != nil {
-					continue
-				}
-				if strings.HasPrefix(path, ignorePath) {
-					if d.IsDir() {
-						return filepath.SkipDir
-					}
-					return nil
-				}
+			relPath, err := filepath.Rel(basePath, path)
+			if err != nil {
+				return err
 			}
 
-			// Handle hidden files/directories
-			if !opts.IncludeHidden && strings.HasPrefix(filepath.Base(path), ".") {
-				if d.IsDir() {
+			// Convert to forward slashes for consistent pattern matching
+			relPath = filepath.ToSlash(relPath)
+			isDir := d.IsDir()
+
+			// Check if path should be included based on patterns
+			if !shouldIncludePath(relPath, isDir, includeMatchers, excludeMatchers) {
+				if isDir {
 					return filepath.SkipDir
 				}
 				return nil
 			}
 
-			isDir := d.IsDir()
-			if !isDir {
-				matched := false
-				_, name := filepath.Split(path)
-				for _, matcher := range excludeMatchers {
-					if matcher.Match(name) {
-						matched = true
-						break
-					}
-				}
-				if matched {
-					return nil
-				}
-
-				matched = false
-				_, name = filepath.Split(path)
-				for _, matcher := range includeMatchers {
-					if matcher.Match(name) {
-						matched = true
-						break
-					}
-				}
-				if !matched {
-					return nil
-				}
-			}
-
-			relPath, err := filepath.Rel(parentPath, path)
-			if err != nil {
-				return err
-			}
-
-			depth := strings.Count(relPath, string(os.PathSeparator)) + 1
+			depth := strings.Count(relPath, "/") + 1
 
 			paths = append(paths, PathInfo{
 				Path:         path,
-				RelativePath: filepath.ToSlash(relPath),
+				RelativePath: relPath,
 				Depth:        depth,
 				IsDir:        isDir,
 			})
@@ -152,9 +112,21 @@ func GetPaths(directories []string, opts Options) ([]PathInfo, error) {
 	return paths, nil
 }
 
-func contains(slice []string, item string) bool {
-	for _, s := range slice {
-		if s == item {
+// shouldIncludePath determines if a path should be included based on the patterns
+func shouldIncludePath(path string, isDir bool, includeMatchers, excludeMatchers []glob.Glob) bool {
+	// Append trailing slash for directories to match directory-specific patterns
+	if isDir {
+		path = path + "/"
+	}
+
+	for _, matcher := range excludeMatchers {
+		if matcher.Match(path) {
+			return false
+		}
+	}
+
+	for _, matcher := range includeMatchers {
+		if matcher.Match(path) {
 			return true
 		}
 	}
@@ -166,7 +138,7 @@ func createPatternMatchers(patterns []string) ([]glob.Glob, error) {
 	for i, pattern := range patterns {
 		g, err := glob.Compile(pattern)
 		if err != nil {
-			return nil, fmt.Errorf("compiling glob pattern '%s': %w", pattern, err)
+			return nil, fmt.Errorf("invalid pattern '%s': %w", pattern, err)
 		}
 		matchers[i] = g
 	}
