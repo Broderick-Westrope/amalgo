@@ -1,0 +1,41 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write # needed for creating GitHub releases
+  packages: write # needed for pushing to GitHub Packages
+
+jobs:
+  goreleaser:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Important for GoReleaser to generate proper changelog
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ">=1.21.0"
+          cache: true
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: latest
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_PAT }}
+
+      # Optional: Upload artifacts to GitHub Actions
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: binaries
+          path: dist/*
