@@ -1,3 +1,8 @@
+exec amalgo testdir
+stdout 'Successfully generated output to: amalgo.txt'
+exists amalgo.txt
+cmpfile amalgo.txt expected.txt
+
 exec amalgo testdir --format json
 stdout 'Successfully generated output to: amalgo.json'
 exists amalgo.json
@@ -13,6 +18,33 @@ package sub
 
 func Helper() {}
 
+-- expected.txt --
+## Generated with Amalgo at: 2025-01-13 21:56:20
+
+## File Tree
+
+└── testdir/
+    ├── file1.go
+    └── sub/
+        └── file2.go
+
+## File Contents
+
+--- Start File: file1.go
+package main
+
+func main() {}
+
+
+--- End File: file1.go
+
+--- Start File: sub/file2.go
+package sub
+
+func Helper() {}
+
+
+--- End File: sub/file2.go
 -- expected.json --
 {
   "timestamp": "2025-01-13 10:58:37",
