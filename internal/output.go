@@ -148,7 +148,7 @@ func writeSymbols(symbols []*parser.Symbol, depth int) (string, error) {
 
 func dumpFiles(paths []PathInfo, skipBinary bool) (string, error) {
 	var sb strings.Builder
-	sb.WriteString("## File Contents")
+	sb.WriteString("## File Contents\n")
 
 	for _, path := range paths {
 		if path.IsDir {
@@ -177,7 +177,8 @@ func dumpFiles(paths []PathInfo, skipBinary bool) (string, error) {
 		}
 
 		sb.WriteString(
-			fmt.Sprintf("\n\n--- File: %s\n%s", path.RelativePath, string(fileContent)),
+			fmt.Sprintf("\n--- Start File: %s\n%s\n--- End File: %s\n",
+				path.RelativePath, string(fileContent), path.RelativePath),
 		)
 	}
 	return sb.String(), nil

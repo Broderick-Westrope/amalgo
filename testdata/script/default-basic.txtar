@@ -14,7 +14,7 @@ package sub
 func Helper() {}
 
 -- expected.txt --
-## Generated with Amalgo at: XXXX-XX-XX XX:XX:XX
+## Generated with Amalgo at: 2025-01-13 21:56:20
 
 ## File Tree
 
@@ -25,13 +25,18 @@ func Helper() {}
 
 ## File Contents
 
---- File: file1.go
+--- Start File: file1.go
 package main
 
 func main() {}
 
 
---- File: sub/file2.go
+--- End File: file1.go
+
+--- Start File: sub/file2.go
 package sub
 
 func Helper() {}
+
+
+--- End File: sub/file2.go

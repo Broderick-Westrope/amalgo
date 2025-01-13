@@ -27,7 +27,7 @@ func TestScript(t *testing.T) {
 			return nil
 		},
 		Cmds: map[string]func(ts *testscript.TestScript, neg bool, args []string){
-			"cmpfile": checkFileContent,
+			"cmpfile": compareFiles,
 			"showfile": func(ts *testscript.TestScript, neg bool, args []string) {
 				if len(args) != 1 {
 					ts.Fatalf("usage: showfile filename")
@@ -44,7 +44,7 @@ func TestScript(t *testing.T) {
 	})
 }
 
-func checkFileContent(ts *testscript.TestScript, neg bool, args []string) {
+func compareFiles(ts *testscript.TestScript, neg bool, args []string) {
 	if len(args) != 2 {
 		ts.Fatalf("usage: cmpfile actual expected")
 	}
@@ -59,9 +59,29 @@ func checkFileContent(ts *testscript.TestScript, neg bool, args []string) {
 		ts.Fatalf("reading %q (expected): %v", temp, err)
 	}
 
-	// Split into lines and compare, ignoring timestamp line
+	// Split into lines
 	actualLines := strings.Split(string(actual), "\n")
 	expectedLines := strings.Split(string(expected), "\n")
+
+	// Create debug versions with visible empty lines
+	debugActual := make([]string, len(actualLines))
+	debugExpected := make([]string, len(expectedLines))
+
+	for i, line := range actualLines {
+		if line == "" {
+			debugActual[i] = "<empty>"
+		} else {
+			debugActual[i] = line
+		}
+	}
+
+	for i, line := range expectedLines {
+		if line == "" {
+			debugExpected[i] = "<empty>"
+		} else {
+			debugExpected[i] = line
+		}
+	}
 
 	matchFailed := false
 	if len(actualLines) != len(expectedLines) {
@@ -70,10 +90,8 @@ func checkFileContent(ts *testscript.TestScript, neg bool, args []string) {
 		}
 	}
 
-	for i, aLine := range actualLines {
-		if matchFailed {
-			break
-		}
+	for i := 0; i < len(actualLines) && i < len(expectedLines); i++ {
+		aLine := actualLines[i]
 		eLine := expectedLines[i]
 		// Skip timestamp line
 		if strings.Contains(aLine, "Generated with Amalgo at:") || strings.Contains(aLine, "timestamp") {
@@ -81,11 +99,17 @@ func checkFileContent(ts *testscript.TestScript, neg bool, args []string) {
 		}
 		if aLine != eLine {
 			matchFailed = true
-			continue
+			break
 		}
 	}
+
 	if matchFailed {
-		diffStr := createDiff(color.RedString("Expected"), color.GreenString("Actual"), string(expected), string(actual))
+		diffStr := createDiff(
+			fmt.Sprintf("Expected (%d lines)", len(expectedLines)),
+			fmt.Sprintf("Actual (%d lines)", len(actualLines)),
+			strings.Join(debugExpected, "\n"),
+			strings.Join(debugActual, "\n"),
+		)
 		ts.Fatalf("Failed to match:\n%s", diffStr)
 	} else if neg {
 		ts.Fatalf("files match but should not")
@@ -97,7 +121,7 @@ func createDiff(name1, name2, text1, text2 string) string {
 	diffs := dmp.DiffMain(text1, text2, false)
 	return fmt.Sprintf(
 		"%s\n%s\n%s",
-		color.RedString("---- "+name1),
+		color.RedString("--- "+name1),
 		color.GreenString("+++ "+name2),
 		dmp.DiffPrettyText(diffs),
 	)
