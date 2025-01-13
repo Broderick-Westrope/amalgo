@@ -1,6 +1,7 @@
 # amalgo
 
-[![Go Version](https://img.shields.io/badge/Go-1.23-00ADD8?style=flat&logo=go)](https://go.dev/doc/install)
+[![Version](https://img.shields.io/badge/Go-1.23-00ADD8?style=flat&logo=go)](https://go.dev/doc/install)
+[![Reference](https://img.shields.io/badge/Go-Reference-00ADD8?style=flat&logo=go)](https://pkg.go.dev/github.com/Broderick-Westrope/amalgo)
 [![License](https://img.shields.io/badge/license-GNU%20GPLv3-blue.svg)](https://github.com/Broderick-Westrope/amalgo/blob/main/LICENSE)
 
 Amalgo is a command-line tool that creates consolidated snapshots (ie. an amalgamation) of source code for analysis, documentation, and sharing with [LLMs](https://en.wikipedia.org/wiki/Large_language_model). It helps developers gather and organize their codebase into a single, well-structured document.
