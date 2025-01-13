@@ -16,7 +16,7 @@ func Helper() {}
 -- expected.json --
 {
   "timestamp": "2025-01-13 10:58:37",
-  "tree": "└── testdir/\n    └── sub/\n        └── file2.go\n",
+  "tree": "└── testdir/\n    ├── file1.go\n    └── sub/\n        └── file2.go\n",
   "files": [
     {
       "path": "file1.go",
