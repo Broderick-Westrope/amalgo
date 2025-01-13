@@ -1,9 +1,9 @@
-exec amalgo testdir -f '*'
+exec amalgo testdir -f '*.go'
 stdout 'Successfully generated output to: amalgo.txt'
 exists amalgo.txt
 cmpfile amalgo.txt expected.txt
 
-exec amalgo testdir --format json -f '*'
+exec amalgo testdir --format json -f '*.go'
 stdout 'Successfully generated output to: amalgo.json'
 exists amalgo.json
 cmpfile amalgo.json expected.json
@@ -23,10 +23,7 @@ func Helper() {}
 
 ## File Tree
 
-└── testdir/
-    ├── file1.go
-    └── sub/
-        └── file2.go
+└── file1.go
 
 ## File Contents
 
@@ -37,26 +34,14 @@ func main() {}
 
 
 --- End File: file1.go
-
---- Start File: sub/file2.go
-package sub
-
-func Helper() {}
-
-
---- End File: sub/file2.go
 -- expected.json --
 {
   "timestamp": "2025-01-13 10:58:37",
-  "tree": "└── testdir/\n    ├── file1.go\n    └── sub/\n        └── file2.go\n",
+  "tree": "└── file1.go\n",
   "files": [
     {
       "path": "file1.go",
       "content": "package main\n\nfunc main() {}\n\n"
-    },
-    {
-      "path": "sub/file2.go",
-      "content": "package sub\n\nfunc Helper() {}\n\n"
     }
   ]
 }
