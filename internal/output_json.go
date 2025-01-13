@@ -69,7 +69,7 @@ func generateOutputJSON(paths []PathInfo, registry *parser.Registry, opts Output
 		return "", fmt.Errorf("marshaling JSON: %w", err)
 	}
 
-	return string(output), nil
+	return string(output) + "\n", nil
 }
 
 func generateFilesJSON(paths []PathInfo, skipBinary bool) ([]JSONFile, error) {

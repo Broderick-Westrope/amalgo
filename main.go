@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/Broderick-Westrope/amalgo/internal"
@@ -16,20 +17,36 @@ const (
 )
 
 func main() {
+	os.Exit(run())
+}
+
+func run() int {
 	cli := RootCmd{
 		Version: versionFlag(version),
 	}
 
+	exitHandler := &exitWriter{}
 	ctx := kong.Parse(&cli,
 		kong.Name(appName),
 		kong.Description("Create consolidated snapshots of source code for analysis, documentation, and sharing with LLMs."),
 		kong.UsageOnError(),
+		kong.Writers(os.Stdout, exitHandler),
+		kong.Exit(exitHandler.Exit),
 		kong.DefaultEnvars(appName),
-		kong.Vars{
-			"version": string(cli.Version),
-		})
+		kong.Vars{"version": string(cli.Version)},
+	)
+
+	if exitHandler.code != 0 {
+		fmt.Fprintf(os.Stderr, "%s", exitHandler.message)
+		return exitHandler.code
+	}
+
 	err := ctx.Run()
-	ctx.FatalIfErrorf(err)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return 1
+	}
+	return 0
 }
 
 type RootCmd struct {
@@ -147,4 +164,19 @@ func (v versionFlag) BeforeApply(app *kong.Kong, vars kong.Vars) error {
 	fmt.Println(vars["version"])
 	app.Exit(0)
 	return nil
+}
+
+// Custom writer that can capture output for testing
+type exitWriter struct {
+	code    int
+	message string
+}
+
+func (w *exitWriter) Write(p []byte) (n int, err error) {
+	w.message += string(p)
+	return len(p), nil
+}
+
+func (w *exitWriter) Exit(code int) {
+	w.code = code
 }

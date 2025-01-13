@@ -1,0 +1,37 @@
+exec amalgo testdir
+stdout 'Successfully generated output to: amalgo.txt'
+exists amalgo.txt
+cmpfile amalgo.txt expected.txt
+
+-- testdir/file1.go --
+package main
+
+func main() {}
+
+-- testdir/sub/file2.go --
+package sub
+
+func Helper() {}
+
+-- expected.txt --
+## Generated with Amalgo at: XXXX-XX-XX XX:XX:XX
+
+## File Tree
+
+└── testdir/
+    ├── file1.go
+    └── sub/
+        └── file2.go
+
+## File Contents
+
+--- File: file1.go
+package main
+
+func main() {}
+
+
+--- File: sub/file2.go
+package sub
+
+func Helper() {}
