@@ -5,6 +5,7 @@ package filter
 
 import (
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 )
@@ -31,20 +32,20 @@ func (f *Filterer) MatchesPath(path string) bool {
 // MatchesPathHow returns whether the path matches and which pattern matched it.
 func (f *Filterer) MatchesPathHow(path string) (bool, *Pattern) {
 	// Normalize path separators.
-	path = strings.Replace(path, string(os.PathSeparator), "/", -1)
+	path = filepath.ToSlash(path)
 
 	var matchingPattern *Pattern
 	matchesPath := false
 
-	for _, ip := range f.patterns {
-		if ip.Pattern.MatchString(path) {
-			if !ip.Negate {
+	for _, pattern := range f.patterns {
+		if pattern.Pattern.MatchString(path) {
+			if !pattern.Negate {
 				matchesPath = true
-				matchingPattern = ip
+				matchingPattern = pattern
 			} else if matchesPath {
 				// Path was previously matched but now negated.
 				matchesPath = false
-				matchingPattern = ip
+				matchingPattern = pattern
 			}
 		}
 	}
@@ -113,7 +114,7 @@ func getPatternFromLine(line string) (*regexp.Regexp, bool) {
 		line = line[1:]
 	}
 
-	// Handle escaped '#' or '!'.
+	// Ignore a prefix of escaped '#' or '!'.
 	if regexp.MustCompile(`^(\#|\!)`).MatchString(line) {
 		line = line[1:]
 	}
@@ -126,6 +127,7 @@ func getPatternFromLine(line string) (*regexp.Regexp, bool) {
 	// Escape dots.
 	line = regexp.MustCompile(`\.`).ReplaceAllString(line, `\.`)
 
+	// This 'magic star" is used temporarily when handling other single-star cases.
 	magicStar := "#$~"
 
 	// Handle '/**/' patterns.
@@ -154,7 +156,7 @@ func getPatternFromLine(line string) (*regexp.Regexp, bool) {
 	} else {
 		expr = "^(|.*/)" + expr
 	}
-	pattern, _ := regexp.Compile(expr)
 
+	pattern, _ := regexp.Compile(expr)
 	return pattern, negatePattern
 }

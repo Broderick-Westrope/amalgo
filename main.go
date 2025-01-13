@@ -107,21 +107,7 @@ func (c *RootCmd) Run() error {
 	registry := parser.NewRegistry()
 	registry.Register(parser.NewGoParser())
 
-	includePatterns := make([]string, 0)
-	excludePatterns := make([]string, 0)
-	for _, original := range c.Filter {
-		new, found := strings.CutPrefix(original, "!")
-		if found {
-			excludePatterns = append(excludePatterns, new)
-		} else {
-			includePatterns = append(includePatterns, original)
-		}
-	}
-	if len(includePatterns) == 0 {
-		includePatterns = []string{"*"}
-	}
-
-	paths, err := internal.TraverseDirectories(c.Dirs, includePatterns, excludePatterns)
+	paths, err := internal.TraverseDirectories(c.Dirs, c.Filter)
 	if err != nil {
 		return fmt.Errorf("traversing directories: %w", err)
 	}
