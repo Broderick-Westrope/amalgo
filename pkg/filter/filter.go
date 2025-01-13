@@ -57,6 +57,8 @@ func (f *Filterer) MatchesPathHow(path string) (bool, *Pattern) {
 func CompileFilterPatterns(patterns ...string) *Filterer {
 	f := new(Filterer)
 	for i, pattern := range patterns {
+		pattern = strings.TrimRight(pattern, "\r")
+		pattern = strings.TrimSpace(pattern)
 		compiledPattern, isNegated := getPatternFromLine(pattern)
 		if compiledPattern != nil {
 			fp := &Pattern{compiledPattern, isNegated, i + 1, pattern}
@@ -91,16 +93,10 @@ func CompileFilterPatternFileAndLines(path string, lines ...string) (*Filterer, 
 // getPatternFromLine converts a single pattern line into a regexp and bool indicating
 // if it's a negated pattern. The rules follow .gitignore syntax.
 func getPatternFromLine(line string) (*regexp.Regexp, bool) {
-	// Trim OS-specific carriage returns.
-	line = strings.TrimRight(line, "\r")
-
 	// Strip comments.
 	if strings.HasPrefix(line, "#") {
 		return nil, false
 	}
-
-	// Trim whitespace.
-	line = strings.Trim(line, " ")
 
 	// Skip empty lines.
 	if line == "" {
