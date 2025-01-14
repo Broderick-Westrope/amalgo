@@ -20,9 +20,17 @@ type PathInfo struct {
 }
 
 // TraverseDirectory traverses the directory and collects path information using the filter package
-func TraverseDirectory(dir string, filterPatterns []string) ([]PathInfo, error) {
-	// Create the filterer from patterns
+func TraverseDirectory(dir string, filterPatterns, gitignorePaths []string) ([]PathInfo, error) {
+	// Create the filter from filter patterns and negated gitignore file patterns.
 	f := filter.CompileFilterPatterns(filterPatterns...)
+	for _, giPath := range gitignorePaths {
+		giFilter, err := filter.CompileFilterPatternFile(giPath)
+		if err != nil {
+			return nil, fmt.Errorf("compiling patterns from gitignore file %q: %w", giPath, err)
+		}
+		giFilter.NegateAll()
+		f.Merge(giFilter)
+	}
 
 	paths := make([]PathInfo, 0)
 	basePath, err := filepath.Abs(dir)

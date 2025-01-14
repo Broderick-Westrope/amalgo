@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/MakeNowJust/heredoc"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -17,14 +18,15 @@ func TestTraverseDirectories(t *testing.T) {
 
 	// Create test directory structure. Bool indicates if it's a directory.
 	testFiles := map[string]bool{
-		"src":                   true,
-		"src/main.go":           false,
-		"src/README.md":         false,
-		"src/internal":          true,
-		"src/internal/util.go":  false,
-		"src/internal/test.txt": false,
-		"vendor":                true,
-		"vendor/lib.go":         false,
+		"src":                     true,
+		"src/main.go":             false,
+		"src/README.md":           false,
+		"src/internal":            true,
+		"src/internal/util.go":    false,
+		"src/internal/another.go": false,
+		"src/internal/test.txt":   false,
+		"vendor":                  true,
+		"vendor/lib.go":           false,
 	}
 
 	// Create the test files and directories.
@@ -38,10 +40,20 @@ func TestTraverseDirectories(t *testing.T) {
 		}
 	}
 
+	{
+		fullPath := filepath.Join(tmpDir, ".gitignore")
+		require.NoError(t, os.MkdirAll(filepath.Dir(fullPath), 0755))
+		require.NoError(t, os.WriteFile(fullPath, []byte(heredoc.Doc(`
+			internal/
+			!internal/util*
+		`)), 0644))
+	}
+
 	tests := map[string]struct {
 		directory      string
 		filterPatterns []string
 		wantRelPaths   []string
+		gitignorePaths []string
 		wantErr        bool
 	}{
 		"match go files in top directory": {
@@ -57,6 +69,7 @@ func TestTraverseDirectories(t *testing.T) {
 			wantRelPaths: []string{
 				"src/main.go",
 				"src/internal/util.go",
+				"src/internal/another.go",
 			},
 		},
 		"exclude directory": {
@@ -71,6 +84,7 @@ func TestTraverseDirectories(t *testing.T) {
 			filterPatterns: []string{"*"},
 			wantRelPaths: []string{
 				"internal/util.go",
+				"internal/another.go",
 				"internal/test.txt",
 			},
 		},
@@ -86,11 +100,25 @@ func TestTraverseDirectories(t *testing.T) {
 				"src/main.go",
 			},
 		},
+		"match all go files with gitignore": {
+			directory:      filepath.Join(tmpDir, "src"),
+			filterPatterns: []string{"**/*.go"},
+			gitignorePaths: []string{
+				filepath.Join(tmpDir, ".gitignore"),
+			},
+			wantRelPaths: []string{
+				"src/main.go",
+				"src/internal/util.go",
+			},
+		},
 	}
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			paths, err := TraverseDirectory(tt.directory, tt.filterPatterns)
+			if tt.gitignorePaths == nil {
+				tt.gitignorePaths = make([]string, 0)
+			}
+			paths, err := TraverseDirectory(tt.directory, tt.filterPatterns, tt.gitignorePaths)
 
 			if tt.wantErr {
 				require.Error(t, err)

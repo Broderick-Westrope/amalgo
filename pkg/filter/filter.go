@@ -23,6 +23,22 @@ type Pattern struct {
 	Line    string
 }
 
+func (f *Filter) Merge(other *Filter) {
+	f.patterns = append(f.patterns, other.patterns...)
+}
+
+func (f *Filter) NegateAll() {
+	for i := range f.patterns {
+		f.patterns[i].Negate = !f.patterns[i].Negate
+
+		pattern, found := strings.CutPrefix(f.patterns[i].Line, "!")
+		if !found {
+			pattern = "!" + f.patterns[i].Line
+		}
+		f.patterns[i].Line = pattern
+	}
+}
+
 // MatchesPath returns true if the path matches the patterns.
 func (f *Filter) MatchesPath(path string) bool {
 	matches, _ := f.MatchesPathHow(path)

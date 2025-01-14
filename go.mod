@@ -3,9 +3,9 @@ module github.com/Broderick-Westrope/amalgo
 go 1.23.3
 
 require (
+	github.com/MakeNowJust/heredoc v1.0.0
 	github.com/alecthomas/kong v1.6.1
 	github.com/fatih/color v1.18.0
-	github.com/gobwas/glob v0.2.3
 	github.com/sergi/go-diff v1.3.1
 	github.com/stretchr/testify v1.10.0
 )
