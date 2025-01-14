@@ -100,6 +100,11 @@ Each flag has a corresponding environment variable which can be used to set the 
     - `*.go,*.{js,ts}` - Include only Go, JavaScript, and TypeScript files.
     - `*,!*.md` - Include everything except Markdown files.
 
+- `-g`,`--gitignore`
+  - **Description:** Specifies `.gitignore` files to use for filtering. These patterns are merged with the filter patterns, taking the same precedence.
+  - **Environment Variable:** `$AMALGO_GITIGNORE`
+  - **Example**: `.gitignore,../some-project/.gitignore,strange.ignore.file`
+
 - `--no-tree`
   - **Description:** Skips the inclusion of the file tree in the output.
   - **Default:** `false`
