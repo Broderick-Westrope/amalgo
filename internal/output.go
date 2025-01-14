@@ -73,7 +73,7 @@ func generateOutlines(paths []PathInfo, registry *parser.Registry) (string, erro
 		if err != nil {
 			return "", fmt.Errorf("processing outline for %q: %w", path.Path, err)
 		}
-		output += fmt.Sprintf("\n### File: %s\n%s", path.RelativePath, temp)
+		output += fmt.Sprintf("### File: %s\n\n%s\n", path.RelativePath, temp)
 	}
 	return output, nil
 }
