@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func TestMatchesPath(t *testing.T) {
@@ -127,62 +126,6 @@ func TestMatchesPath(t *testing.T) {
 		})
 	}
 }
-func TestCompileFilterPatterns(t *testing.T) {
-	tests := map[string]struct {
-		input    []string
-		wantLen  int
-		wantLine string // Line of first pattern if wantLen > 0
-	}{
-		"empty patterns": {
-			input:   []string{},
-			wantLen: 0,
-		},
-		"only comments": {
-			input:   []string{"#comment", " # comment "},
-			wantLen: 0,
-		},
-		"empty lines are skipped": {
-			input:   []string{"", "  "},
-			wantLen: 0,
-		},
-		"single valid pattern": {
-			input:    []string{"*.txt"},
-			wantLen:  1,
-			wantLine: "*.txt",
-		},
-		"mixed patterns": {
-			input:    []string{"", "#comment", "*.txt", "  ", "*.md"},
-			wantLen:  2,
-			wantLine: "*.txt",
-		},
-		"whitespace is trimmed": {
-			input:    []string{" *.txt  "},
-			wantLen:  1,
-			wantLine: "*.txt",
-		},
-		"negated patterns": {
-			input:    []string{"!*.txt"},
-			wantLen:  1,
-			wantLine: "!*.txt",
-		},
-		"escaped characters": {
-			input:    []string{"\\#not-a-comment"},
-			wantLen:  1,
-			wantLine: "\\#not-a-comment",
-		},
-	}
-
-	for name, tc := range tests {
-		t.Run(name, func(t *testing.T) {
-			f := CompileFilterPatterns(tc.input...)
-			assert.Len(t, f.patterns, tc.wantLen)
-			if tc.wantLen > 0 {
-				require.GreaterOrEqual(t, len(f.patterns), 1)
-				assert.Equal(t, tc.wantLine, f.patterns[0].Line)
-			}
-		})
-	}
-}
 
 func TestMatchesPathHow(t *testing.T) {
 	tests := map[string]struct {
@@ -234,7 +177,7 @@ func TestMatchesPathHow(t *testing.T) {
 	}
 }
 
-func TestFilterPatternMatching(t *testing.T) {
+func TestCompileAndMatchPatterns(t *testing.T) {
 	tests := map[string]struct {
 		patterns    []string
 		pathsToWant map[string]bool
@@ -352,6 +295,33 @@ func TestFilterPatternMatching(t *testing.T) {
 				"cmd/test/testutil.go": false,
 			},
 		},
+		"recursively match subdirectory and extension": {
+			patterns: []string{"src/**/*.go"},
+			pathsToWant: map[string]bool{
+				"src/pkg/file.go": true,
+
+				"cmd/main.go":          false,
+				"internal/config.go":   false,
+				"main.go":              false,
+				"pkg/sub/util.go":      false,
+				"cmd/test/testutil.go": false,
+			},
+		},
+		"complex nested directory matching": {
+			patterns: []string{
+				"src/*/test/**/*.go",
+				"!src/*/test/vendor/**",
+				"!src/temp/*/",
+			},
+			pathsToWant: map[string]bool{
+				"src/project/test/unit/main_test.go":      true,
+				"src/lib/test/integration/helper_test.go": true,
+
+				"src/project/test/vendor/mock/mock.go": false,
+				"src/temp/cache/data.txt":              false,
+				"src/project/prod/main.go":             false,
+			},
+		},
 	}
 
 	for name, tt := range tests {
@@ -360,7 +330,7 @@ func TestFilterPatternMatching(t *testing.T) {
 
 			for path, want := range tt.pathsToWant {
 				got := f.MatchesPath(path)
-				assert.Equal(t, want, got, "Patterns: %q, Path: %q", strings.Join(tt.patterns, ","), path)
+				assert.Equal(t, want, got, "Patterns: %q; Path: %q", strings.Join(tt.patterns, ", "), path)
 			}
 		})
 	}
