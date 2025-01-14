@@ -103,10 +103,10 @@ func getPatternFromLine(line string) (*regexp.Regexp, bool) {
 		return nil, false
 	}
 
-	// Check for exclusion prefix.
+	// Check for negation prefix. Several will negate the previous negation (ie. toggling).
 	negatePattern := false
-	if line[0] == '!' {
-		negatePattern = true
+	for line[0] == '!' {
+		negatePattern = !negatePattern
 		line = line[1:]
 	}
 
