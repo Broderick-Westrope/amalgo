@@ -1,0 +1,62 @@
+exec amalgo testdir --gitignore='.a-gitignore,b-gitignore'
+! stderr .
+stdout 'Successfully generated output to: amalgo.txt'
+exists amalgo.txt
+cmpfile amalgo.txt expected.txt
+
+exec amalgo testdir --format json --gitignore='.a-gitignore,b-gitignore'
+! stderr .
+stdout 'Successfully generated output to: amalgo.json'
+exists amalgo.json
+cmpfile amalgo.json expected.json
+
+-- .a-gitignore --
+**/*.go
+
+-- b-gitignore --
+b-gitignore
+!*.go
+
+-- testdir/file1.go --
+package main
+
+func main() {}
+
+-- testdir/sub/file2.go --
+package sub
+
+func Helper() {}
+
+-- testdir/sub/another/file3.go --
+package another
+
+func Something() {}
+
+-- expected.txt --
+## Generated with Amalgo at: 2025-01-13 21:56:20
+
+## File Tree
+
+└── testdir/
+    └── file1.go
+
+## File Contents
+
+--- Start File: testdir/file1.go
+package main
+
+func main() {}
+
+
+--- End File: testdir/file1.go
+-- expected.json --
+{
+  "timestamp": "2025-01-13 10:58:37",
+  "tree": "└── testdir/\n    └── file1.go\n",
+  "files": [
+    {
+      "path": "testdir/file1.go",
+      "content": "package main\n\nfunc main() {}\n\n"
+    }
+  ]
+}
