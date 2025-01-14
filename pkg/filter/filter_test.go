@@ -36,7 +36,7 @@ func TestMatchesPath(t *testing.T) {
 		"single character wildcard": {
 			patterns: []string{"test?.txt"},
 			path:     "test1.txt",
-			want:     false, // The implementation escapes ? rather than treating it as a wildcard
+			want:     true,
 		},
 		"actual dots in filenames": {
 			patterns: []string{"*.txt"},
@@ -334,6 +334,19 @@ func TestCompileAndMatchPatterns(t *testing.T) {
 				"important.txt":      true,
 				"docs/notes.txt":     false,
 				"test/important.txt": false,
+			},
+		},
+		"match with question mark wildcards": {
+			patterns: []string{"test?.txt", "lib/????.go"},
+			pathsToWant: map[string]bool{
+				"test1.txt":   true,
+				"testa.txt":   true,
+				"lib/util.go": true,
+				"lib/main.go": true,
+
+				"test.txt":     false,
+				"test12.txt":   false,
+				"lib/utils.go": false,
 			},
 		},
 	}
