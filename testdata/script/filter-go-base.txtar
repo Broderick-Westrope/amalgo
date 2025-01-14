@@ -23,24 +23,25 @@ func Helper() {}
 
 ## File Tree
 
-└── file1.go
+└── testdir/
+    └── file1.go
 
 ## File Contents
 
---- Start File: file1.go
+--- Start File: testdir/file1.go
 package main
 
 func main() {}
 
 
---- End File: file1.go
+--- End File: testdir/file1.go
 -- expected.json --
 {
   "timestamp": "2025-01-13 10:58:37",
-  "tree": "└── file1.go\n",
+  "tree": "└── testdir/\n    └── file1.go\n",
   "files": [
     {
-      "path": "file1.go",
+      "path": "testdir/file1.go",
       "content": "package main\n\nfunc main() {}\n\n"
     }
   ]
