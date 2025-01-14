@@ -118,11 +118,6 @@ func getPatternFromLine(line string) (*regexp.Regexp, bool) {
 		expr = expr[1:]
 	}
 
-	// Add leading '/' for patterns like 'foo/*.txt'.
-	if regexp.MustCompile(`([^\/+])/.*\*\.`).MatchString(expr) && expr[0] != '/' {
-		expr = "/" + expr
-	}
-
 	// Escape dots.
 	expr = regexp.MustCompile(`\.`).ReplaceAllString(expr, `\.`)
 
@@ -158,11 +153,6 @@ func getPatternFromLine(line string) (*regexp.Regexp, bool) {
 	case strings.HasPrefix(line, "**/"):
 		// Pattern contains a slash but doesn't start with one
 		expr = "^(|.*/)" + expr
-
-	case strings.Contains(line, "/"):
-		// If pattern contains / but doesn't start with one,
-		// it can match anywhere in the path after the first component
-		expr = `^[^\/]*` + expr
 
 	default:
 		// Simple pattern like *.go - should only match in current directory
