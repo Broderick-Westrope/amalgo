@@ -16,13 +16,12 @@ Amalgo is a command-line tool that creates consolidated snapshots (ie. an amalga
 
 ## Features
 
-- 📁 **Directory Tree Generation**: Creates a visual representation of your project structure
-- 📝 **Code Content Dumping**: Consolidates all source files into a single document
-- 🔍 **Language-Specific Outlines**: Generates structural outlines for supported programming languages
-- 🎨 **Syntax Support**: Currently supports Go, with extensibility for other languages
-- ⚡ **Flexible Filtering**: Include/exclude files using glob patterns
-- 🚫 **Binary File Handling**: Option to skip or include binary files
-- 🎯 **Selective Processing**: Ignore specific directories and hidden files
+- 📁 **Directory Tree Generation**: Creates a visual representation of your project structure.
+- 📝 **Code Content Dumping**: Consolidates all source files into a single document.
+- 🎯 **Flexible Filtering**: Include/exclude files using the gitignore pattern syntax.
+- 🔍 **Language-Specific Outlines**: Generates structural outlines for supported programming languages.
+- 🎨 **Syntax Support**: The language outlines feature currently supports Go, with extensibility for other languages. All other features are language agnostic.
+- 🚫 **Binary File Handling**: Option to skip or include binary files.
 
 ## Installation
 
@@ -59,8 +58,8 @@ amalgo -o output.txt
 # Print output to stdout
 amalgo --stdout
 
-# Include only specific file types (eg. Go and Markdown files, but not Go tests or hidden files/directories)
-amalgo -f '**/*.{go,md},!**/*_test.go,!.*'
+# Include only specific file types (eg. Go files, but not Go tests or hidden files/directories)
+amalgo -f '**/*.go,!**/*_test.go,!.*'
 
 # Exclude certain directories (eg. include everything except the .git directory)
 amalgo -f '!.git/'
@@ -74,9 +73,10 @@ amalgo --no-tree --no-dump --outline
 
 ### Positional Arguments
 
-- `dirs`
-  - **Description:** Directories to analyze. If a file is provided it's parent directory will be used.
+- `dir`
+  - **Description:** Directory to analyze. If a file is provided it's parent directory will be used.
   - **Optional:** `true`
+  - **Default:** `.` (current directory)
 
 ### Flags
 
@@ -91,7 +91,7 @@ amalgo --no-tree --no-dump --outline
   - **Environment Variable:** `$AMALGO_STDOUT`
 
 - `-f, --filter`
-  - **Description:** Controls which files are processed using glob patterns. Include patterns are processed first, then exclude patterns (prefixed with `!`). Hidden files and directories are excluded by default.
+  - **Description:** Controls which files are processed using glob patterns similar to gitignore. Include patterns are processed first, then exclude patterns (prefixed with `!`). Hidden files and directories are excluded by default.
   - **Default:** `*,!.*`
   - **Environment Variable:** `$AMALGO_FILTER`
   - **Examples:**
@@ -192,7 +192,6 @@ I encourage you to create an issue and spark a discussion there before beginning
 Here are some suggestions:
 
 - **Language parsers:** If you would like to add first-class support for a new language that would be great! The `parser` package contains a `Parser` interface that defines what your new parser should include.
-- **Tests:** Currently the testing for this tool is limited. Most of it was created in a single night and I didn't slow down to test things. Start a discussion with your ideas or jump right in.
 - **Ideas:** The thing I'm most interested in hearing is ideas for unique use cases. If the use case requires some modifications that's fine. Similarly, if you think something can be done better I'd love to hear it. This is a relatively small CLI utility, so a bit of growth/change is acceptable for a cool enough use case ;)
 
 ## License
