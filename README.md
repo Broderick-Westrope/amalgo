@@ -49,8 +49,8 @@ Example commands:
 # Analyze current directory, excluding hidden files and directories by default
 amalgo
 
-# Analyze specific directories
-amalgo internal/ .vscode/
+# Analyze a specific directory
+amalgo internal/
 
 # Output to a specific file
 amalgo -o output.txt
@@ -58,11 +58,11 @@ amalgo -o output.txt
 # Print output to stdout
 amalgo --stdout
 
-# Include only specific file types (eg. Go files, but not Go tests or hidden files/directories)
+# Include only specific file types (eg. Go files without any Go tests or hidden files/directories)
 amalgo -f '**/*.go,!**/*_test.go,!.*'
 
 # Exclude certain directories (eg. include everything except the .git directory)
-amalgo -f '!.git/'
+amalgo -f '*,!.git/'
 
 # Include hidden files and directories
 amalgo -f '*'
