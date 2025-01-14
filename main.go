@@ -51,7 +51,7 @@ func run() int {
 
 type RootCmd struct {
 	// Default command args and flags
-	Dirs          []string              `arg:"" optional:"" help:"Directories to analyze. If a file is provided it's parent directory will be used." type:"path" default:"."`
+	Dir           string                `arg:"" optional:"" help:"Directory to analyze. If a file is provided it's parent directory will be used." type:"path" default:"."`
 	Output        string                `help:"Specifies the destination path for the output file. The file extension will automatically adjust based on the selected format (see '--format')." short:"o" type:"path" placeholder:"amalgo.txt"`
 	Stdout        bool                  `help:"Redirects all output to standard output (terminal) instead of writing to a file. Useful for piping output to other commands."`
 	Filter        []string              `help:"Controls which files are processed using glob patterns. Include patterns are processed first, then exclude patterns (prefixed with '!'). Hidden files and directories are excluded by default." short:"f" default:"*,!.*"`
@@ -76,9 +76,6 @@ func (c *RootCmd) validate() bool {
 	}
 
 	issues := make([]string, 0)
-	if len(c.Dirs) == 0 {
-		issues = append(issues, "At least one input directory is required.")
-	}
 	if c.NoDump && c.NoTree && !c.Outline {
 		issues = append(issues, "An empty output is not allowed (no dump, no tree, and no outline).")
 	}
@@ -107,7 +104,7 @@ func (c *RootCmd) Run() error {
 	registry := parser.NewRegistry()
 	registry.Register(parser.NewGoParser())
 
-	paths, err := internal.TraverseDirectories(c.Dirs, c.Filter)
+	paths, err := internal.TraverseDirectory(c.Dir, c.Filter)
 	if err != nil {
 		return fmt.Errorf("traversing directories: %w", err)
 	}

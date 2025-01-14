@@ -6,7 +6,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 )
 
@@ -55,7 +54,7 @@ func GenerateTree(paths []PathInfo) string {
 		mapPathToChildren[parent] = append(mapPathToChildren[parent], path)
 	}
 
-	var sb strings.Builder
+	var output string
 	var printTree func(path PathInfo, prefix string, isLast bool)
 	printTree = func(path PathInfo, prefix string, isLast bool) {
 		// Print current item
@@ -68,7 +67,7 @@ func GenerateTree(paths []PathInfo) string {
 		if path.IsDir {
 			name += "/"
 		}
-		sb.WriteString(fmt.Sprintf("%s%s%s\n", prefix, connector, name))
+		output += fmt.Sprintf("%s%s%s\n", prefix, connector, name)
 
 		// Print children
 		childPrefix := prefix + "│   "
@@ -82,13 +81,19 @@ func GenerateTree(paths []PathInfo) string {
 		}
 	}
 
-	// Process root level items
-	rootPaths := mapPathToChildren[filepath.Dir(paths[0].Path)]
+	shortestPath := paths[0]
+	for _, path := range paths {
+		if len(path.Path) < len(shortestPath.Path) {
+			shortestPath = path
+		}
+	}
+
+	// Find and process root level items.
+	rootPaths := mapPathToChildren[filepath.Dir(shortestPath.Path)]
 	for i, path := range rootPaths {
 		printTree(path, "", i == len(rootPaths)-1)
 	}
-
-	return sb.String()
+	return output
 }
 
 // WriteOutput writes content to a file or stdout

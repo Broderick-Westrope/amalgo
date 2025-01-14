@@ -39,20 +39,20 @@ func TestTraverseDirectories(t *testing.T) {
 	}
 
 	tests := map[string]struct {
-		directories    []string
+		directory      string
 		filterPatterns []string
 		wantRelPaths   []string
 		wantErr        bool
 	}{
 		"match go files in top directory": {
-			directories:    []string{filepath.Join(tmpDir, "src")},
+			directory:      filepath.Join(tmpDir, "src"),
 			filterPatterns: []string{"*.go"},
 			wantRelPaths: []string{
 				"src/main.go",
 			},
 		},
 		"match all go files": {
-			directories:    []string{filepath.Join(tmpDir, "src")},
+			directory:      filepath.Join(tmpDir, "src"),
 			filterPatterns: []string{"**/*.go"},
 			wantRelPaths: []string{
 				"src/main.go",
@@ -60,14 +60,14 @@ func TestTraverseDirectories(t *testing.T) {
 			},
 		},
 		"exclude directory": {
-			directories:    []string{filepath.Join(tmpDir, "src")},
+			directory:      filepath.Join(tmpDir, "src"),
 			filterPatterns: []string{"*.go", "**/*.go", "!internal/**"},
 			wantRelPaths: []string{
 				"src/main.go",
 			},
 		},
 		"match specific directory": {
-			directories:    []string{filepath.Join(tmpDir, "src", "internal")},
+			directory:      filepath.Join(tmpDir, "src", "internal"),
 			filterPatterns: []string{"*"},
 			wantRelPaths: []string{
 				"internal/util.go",
@@ -75,12 +75,12 @@ func TestTraverseDirectories(t *testing.T) {
 			},
 		},
 		"non-existent directory": {
-			directories:    []string{filepath.Join(tmpDir, "nonexistent")},
+			directory:      filepath.Join(tmpDir, "nonexistent"),
 			filterPatterns: []string{"**/*.go"},
 			wantErr:        true,
 		},
 		"file as directory": {
-			directories:    []string{filepath.Join(tmpDir, "src", "main.go")},
+			directory:      filepath.Join(tmpDir, "src", "main.go"),
 			filterPatterns: []string{"*.go"},
 			wantRelPaths: []string{
 				"src/main.go",
@@ -90,7 +90,7 @@ func TestTraverseDirectories(t *testing.T) {
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			paths, err := TraverseDirectories(tt.directories, tt.filterPatterns)
+			paths, err := TraverseDirectory(tt.directory, tt.filterPatterns)
 
 			if tt.wantErr {
 				require.Error(t, err)

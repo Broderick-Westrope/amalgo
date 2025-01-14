@@ -19,78 +19,76 @@ type PathInfo struct {
 	IsDir        bool
 }
 
-// TraverseDirectories traverses directories and collects path information using the filter package
-func TraverseDirectories(directories []string, filterPatterns []string) ([]PathInfo, error) {
+// TraverseDirectory traverses the directory and collects path information using the filter package
+func TraverseDirectory(dir string, filterPatterns []string) ([]PathInfo, error) {
 	// Create the filterer from patterns
 	f := filter.CompileFilterPatterns(filterPatterns...)
 
 	paths := make([]PathInfo, 0)
-	for _, dir := range directories {
-		basePath, err := filepath.Abs(dir)
-		if err != nil {
-			return nil, fmt.Errorf("getting base path for directory %q: %w", dir, err)
-		}
+	basePath, err := filepath.Abs(dir)
+	if err != nil {
+		return nil, fmt.Errorf("getting base path for directory %q: %w", dir, err)
+	}
 
-		baseInfo, err := os.Stat(basePath)
-		if err != nil {
-			return nil, fmt.Errorf("describing base path for directory %q: %w", dir, err)
-		}
+	baseInfo, err := os.Stat(basePath)
+	if err != nil {
+		return nil, fmt.Errorf("describing base path for directory %q: %w", dir, err)
+	}
 
+	if !baseInfo.IsDir() {
+		basePath = filepath.Dir(basePath)
+		baseInfo, err = os.Stat(basePath)
+		if err != nil {
+			return nil, err
+		}
 		if !baseInfo.IsDir() {
-			basePath = filepath.Dir(basePath)
-			baseInfo, err = os.Stat(basePath)
-			if err != nil {
-				return nil, err
-			}
-			if !baseInfo.IsDir() {
-				return nil, fmt.Errorf("expected base path %q to be a directory", basePath)
-			}
-		}
-
-		// Base parent allows getting the relative path in relation to the parent.
-		baseParent := filepath.Dir(basePath)
-
-		err = filepath.WalkDir(basePath, func(path string, d fs.DirEntry, err error) error {
-			if err != nil {
-				return fmt.Errorf("at path %q: %w", path, err)
-			}
-
-			// Skip directories as the filter system is built to process file paths.
-			// Skip the base path as it's already processed.
-			if d.IsDir() || path == basePath {
-				return nil
-			}
-
-			relPath, err := filepath.Rel(basePath, path)
-			if err != nil {
-				return fmt.Errorf("getting relative path between %q and %q: %w", basePath, path, err)
-			}
-
-			// Convert to forward slashes for consistent pattern matching
-			relPath = filepath.ToSlash(relPath)
-
-			// Check if a file path should be included based on patterns
-			if f.MatchesPath(relPath) {
-				relPath, err = filepath.Rel(baseParent, path)
-				if err != nil {
-					return fmt.Errorf("getting relative path between %q and %q: %w", baseParent, path, err)
-				}
-
-				paths = append(paths, PathInfo{
-					Path:         path,
-					RelativePath: relPath,
-					Depth:        strings.Count(relPath, "/") + 1,
-					IsDir:        false,
-				})
-			}
-			return nil
-		})
-		if err != nil {
-			return nil, fmt.Errorf("walking directory %q: %w", basePath, err)
+			return nil, fmt.Errorf("expected base path %q to be a directory", basePath)
 		}
 	}
 
-	err := processPaths(&paths)
+	// Base parent allows getting the relative path in relation to the parent.
+	baseParent := filepath.Dir(basePath)
+
+	err = filepath.WalkDir(basePath, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return fmt.Errorf("at path %q: %w", path, err)
+		}
+
+		// Skip directories as the filter system is built to process file paths.
+		// Skip the base path as it's already processed.
+		if d.IsDir() || path == basePath {
+			return nil
+		}
+
+		relPath, err := filepath.Rel(basePath, path)
+		if err != nil {
+			return fmt.Errorf("getting relative path between %q and %q: %w", basePath, path, err)
+		}
+
+		// Convert to forward slashes for consistent pattern matching
+		relPath = filepath.ToSlash(relPath)
+
+		// Check if a file path should be included based on patterns
+		if f.MatchesPath(relPath) {
+			relPath, err = filepath.Rel(baseParent, path)
+			if err != nil {
+				return fmt.Errorf("getting relative path between %q and %q: %w", baseParent, path, err)
+			}
+
+			paths = append(paths, PathInfo{
+				Path:         path,
+				RelativePath: relPath,
+				Depth:        strings.Count(relPath, "/") + 1,
+				IsDir:        false,
+			})
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("walking directory %q: %w", basePath, err)
+	}
+
+	err = processPaths(&paths)
 	if err != nil {
 		return nil, err
 	}
