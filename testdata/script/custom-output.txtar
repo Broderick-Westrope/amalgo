@@ -1,0 +1,64 @@
+exec amalgo testdir -o custom.some-txt
+stdout 'Successfully generated output to: '
+stdout 'custom.some-txt'
+exists custom.some-txt
+cmpfile custom.some-txt expected.txt
+
+exec amalgo testdir -o custom.some-json --format json
+stdout 'Successfully generated output to: '
+stdout 'custom.some-json'
+exists custom.some-json
+cmpfile custom.some-json expected.json
+
+-- testdir/file1.go --
+package main
+
+func main() {}
+
+-- testdir/sub/file2.go --
+package sub
+
+func Helper() {}
+
+-- expected.txt --
+## Generated with Amalgo at: 2025-01-13 21:56:20
+
+## File Tree
+
+└── testdir/
+    ├── file1.go
+    └── sub/
+        └── file2.go
+
+## File Contents
+
+--- Start File: testdir/file1.go
+package main
+
+func main() {}
+
+
+--- End File: testdir/file1.go
+
+--- Start File: testdir/sub/file2.go
+package sub
+
+func Helper() {}
+
+
+--- End File: testdir/sub/file2.go
+-- expected.json --
+{
+  "timestamp": "2025-01-13 10:58:37",
+  "tree": "└── testdir/\n    ├── file1.go\n    └── sub/\n        └── file2.go\n",
+  "files": [
+    {
+      "path": "testdir/file1.go",
+      "content": "package main\n\nfunc main() {}\n\n"
+    },
+    {
+      "path": "testdir/sub/file2.go",
+      "content": "package sub\n\nfunc Helper() {}\n\n"
+    }
+  ]
+}

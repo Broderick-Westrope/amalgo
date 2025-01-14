@@ -1,0 +1,5 @@
+exec amalgo testdir --no-tree --no-dump
+stdout 'An empty output is not allowed'
+
+! exec amalgo nonexistent
+stderr 'error: traversing directories'

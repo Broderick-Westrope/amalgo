@@ -1,10 +1,10 @@
-exec amalgo testdir -f '*'
+exec amalgo testdir --no-tree
 ! stderr .
 stdout 'Successfully generated output to: amalgo.txt'
 exists amalgo.txt
 cmpfile amalgo.txt expected.txt
 
-exec amalgo testdir --format json -f '*'
+exec amalgo testdir --no-tree --format json
 ! stderr .
 stdout 'Successfully generated output to: amalgo.json'
 exists amalgo.json
@@ -20,31 +20,10 @@ package sub
 
 func Helper() {}
 
--- testdir/.env --
-SOME_ENV_VAR=value
-
--- testdir/sub/.env --
-SOME_ENV_VAR=value
-
 -- expected.txt --
 ## Generated with Amalgo at: 2025-01-13 21:56:20
 
-## File Tree
-
-└── testdir/
-    ├── .env
-    ├── file1.go
-    └── sub/
-        ├── .env
-        └── file2.go
-
 ## File Contents
-
---- Start File: testdir/.env
-SOME_ENV_VAR=value
-
-
---- End File: testdir/.env
 
 --- Start File: testdir/file1.go
 package main
@@ -53,12 +32,6 @@ func main() {}
 
 
 --- End File: testdir/file1.go
-
---- Start File: testdir/sub/.env
-SOME_ENV_VAR=value
-
-
---- End File: testdir/sub/.env
 
 --- Start File: testdir/sub/file2.go
 package sub
@@ -70,19 +43,10 @@ func Helper() {}
 -- expected.json --
 {
   "timestamp": "2025-01-13 10:58:37",
-  "tree": "└── testdir/\n    ├── .env\n    ├── file1.go\n    └── sub/\n        ├── .env\n        └── file2.go\n",
   "files": [
-    {
-      "path": "testdir/.env",
-      "content": "SOME_ENV_VAR=value\n\n"
-    },
     {
       "path": "testdir/file1.go",
       "content": "package main\n\nfunc main() {}\n\n"
-    },
-    {
-      "path": "testdir/sub/.env",
-      "content": "SOME_ENV_VAR=value\n\n"
     },
     {
       "path": "testdir/sub/file2.go",

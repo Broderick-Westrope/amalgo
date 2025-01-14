@@ -1,9 +1,11 @@
 exec amalgo testdir
+! stderr .
 stdout 'Successfully generated output to: amalgo.txt'
 exists amalgo.txt
 cmpfile amalgo.txt expected.txt
 
 exec amalgo testdir --format json
+! stderr .
 stdout 'Successfully generated output to: amalgo.json'
 exists amalgo.json
 cmpfile amalgo.json expected.json

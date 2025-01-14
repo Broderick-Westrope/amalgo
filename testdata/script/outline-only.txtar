@@ -1,0 +1,115 @@
+exec amalgo testdir --no-tree --no-dump --outline
+! stderr .
+stdout 'Successfully generated output to: amalgo.txt'
+exists amalgo.txt
+cmpfile amalgo.txt expected.txt
+
+exec amalgo testdir --no-tree --no-dump --outline --format json
+! stderr .
+stdout 'Successfully generated output to: amalgo.json'
+exists amalgo.json
+cmpfile amalgo.json expected.json
+
+-- testdir/file1.go --
+package main
+
+var Global = Doer{}
+const someConst string = "a value"
+func main() {}
+
+type Acter interface {
+  Act(string) int
+}
+type Doer struct{}
+
+func(Doer) Act(_ string) int {
+  return 1
+}
+
+-- testdir/sub/file2.go --
+package sub
+
+func Helper() {}
+
+-- expected.txt --
+## Generated with Amalgo at: 2025-01-14 23:26:02
+
+## Language-Specific Outlines
+
+### File: testdir/file1.go
+
+VAR: Global
+CONST: someConst (string)
+FUNCTION: main (func main())
+INTERFACE: Acter
+  METHOD: Act ((string) int)
+STRUCT: Doer
+METHOD: Doer.Act (func (Doer) Act(_ string) int)
+
+### File: testdir/sub/file2.go
+
+FUNCTION: Helper (func Helper())
+
+-- expected.json --
+{
+  "timestamp": "2025-01-13 10:58:37",
+  "outlines": [
+    {
+      "path": "testdir/file1.go",
+      "symbols": [
+        {
+          "type": "var",
+          "name": "Global",
+          "metadata": null
+        },
+        {
+          "type": "const",
+          "name": "someConst",
+          "signature": "string",
+          "metadata": null
+        },
+        {
+          "type": "function",
+          "name": "main",
+          "signature": "func main()",
+          "metadata": null
+        },
+        {
+          "type": "interface",
+          "name": "Acter",
+          "children": [
+            {
+              "type": "method",
+              "name": "Act",
+              "signature": "(string) int",
+              "metadata": null
+            }
+          ],
+          "metadata": null
+        },
+        {
+          "type": "struct",
+          "name": "Doer",
+          "metadata": null
+        },
+        {
+          "type": "method",
+          "name": "Doer.Act",
+          "signature": "func (Doer) Act(_ string) int",
+          "metadata": null
+        }
+      ]
+    },
+    {
+      "path": "testdir/sub/file2.go",
+      "symbols": [
+        {
+          "type": "function",
+          "name": "Helper",
+          "signature": "func Helper()",
+          "metadata": null
+        }
+      ]
+    }
+  ]
+}

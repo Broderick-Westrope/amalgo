@@ -1,0 +1,23 @@
+exec amalgo testdir --stdout
+! stderr .
+! stdout 'Successfully generated'
+stdout '## Generated with Amalgo'
+stdout '## File Tree'
+stdout '## File Contents'
+
+exec amalgo testdir --stdout
+! stderr .
+! stdout 'Successfully generated'
+stdout '## Generated with Amalgo'
+stdout '## File Contents'
+
+-- testdir/file1.go --
+package main
+
+func main() {}
+
+-- testdir/sub/file2.go --
+package sub
+
+func Helper() {}
+

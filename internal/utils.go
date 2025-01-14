@@ -100,7 +100,10 @@ func GenerateTree(paths []PathInfo) string {
 func WriteOutput(path string, content string) error {
 	if path == "stdout" || path == "-" {
 		_, err := fmt.Print(content)
-		return fmt.Errorf("writing to stdout: %w", err)
+		if err != nil {
+			return fmt.Errorf("writing to stdout: %w", err)
+		}
+		return nil
 	}
 
 	dir := filepath.Dir(path)

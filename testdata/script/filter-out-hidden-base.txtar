@@ -1,4 +1,4 @@
-exec amalgo testdir -f '*'
+exec amalgo testdir -f '*,!.*'
 ! stderr .
 stdout 'Successfully generated output to: amalgo.txt'
 exists amalgo.txt
@@ -32,19 +32,12 @@ SOME_ENV_VAR=value
 ## File Tree
 
 └── testdir/
-    ├── .env
     ├── file1.go
     └── sub/
         ├── .env
         └── file2.go
 
 ## File Contents
-
---- Start File: testdir/.env
-SOME_ENV_VAR=value
-
-
---- End File: testdir/.env
 
 --- Start File: testdir/file1.go
 package main
