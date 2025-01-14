@@ -322,6 +322,20 @@ func TestCompileAndMatchPatterns(t *testing.T) {
 				"src/project/prod/main.go":             false,
 			},
 		},
+		"match with multiple pattern ordering": {
+			patterns: []string{
+				"*.txt",
+				"!important.txt",
+				"!!important.txt",
+				"!test/important.txt",
+			},
+			pathsToWant: map[string]bool{
+				"readme.txt":         true,
+				"important.txt":      true,
+				"docs/notes.txt":     false,
+				"test/important.txt": false,
+			},
+		},
 	}
 
 	for name, tt := range tests {
