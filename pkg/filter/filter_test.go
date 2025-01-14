@@ -316,6 +316,42 @@ func TestFilterPatternMatching(t *testing.T) {
 				"internal/test.txt": false,
 			},
 		},
+		"match with escaped special characters": {
+			patterns: []string{`\!important.txt`, `\#comment.txt`},
+			pathsToWant: map[string]bool{
+				"!important.txt": true,
+				"#comment.txt":   true,
+
+				"important.txt":       false,
+				"comment.txt":         false,
+				"test/!important.txt": false,
+			},
+		},
+		"match directories with trailing slash": {
+			patterns: []string{"docs/", "!docs/internal/"},
+			pathsToWant: map[string]bool{
+				"docs/readme.md":   true,
+				"docs/api/spec.md": true,
+
+				"docs/internal/dev.md":  false,
+				"docs/internal/arch.md": false,
+				"other/docs/readme.md":  false,
+			},
+		},
+		"match with directory depth constraints": {
+			patterns: []string{
+				"/*/*.go",    // Matches files exactly one directory deep
+				"!/**/test/", // Excludes any test directories at any depth
+			},
+			pathsToWant: map[string]bool{
+				"cmd/main.go":        true,
+				"internal/config.go": true,
+
+				"main.go":              false,
+				"pkg/sub/util.go":      false,
+				"cmd/test/testutil.go": false,
+			},
+		},
 	}
 
 	for name, tt := range tests {
