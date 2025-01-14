@@ -80,6 +80,8 @@ amalgo --no-tree --no-dump --outline
 
 ### Flags
 
+Each flag has a corresponding environment variable which can be used to set the value. Flags override environment variables.
+
 - `-o, --output`
   - **Description:** Specifies the destination path for the output file. The file extension will automatically adjust based on the selected format (see `--format`).
   - **Default:** `amalgo.txt`
