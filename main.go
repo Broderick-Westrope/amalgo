@@ -25,7 +25,7 @@ func run() int {
 		Version: versionFlag(version),
 	}
 
-	exitHandler := &exitWriter{}
+	exitHandler := &exitWriter{code: -1}
 	ctx := kong.Parse(&cli,
 		kong.Name(appName),
 		kong.Description("Create consolidated snapshots of source code for analysis, documentation, and sharing with LLMs."),
@@ -36,7 +36,10 @@ func run() int {
 		kong.Vars{"version": string(cli.Version)},
 	)
 
-	if exitHandler.code != 0 {
+	switch {
+	case exitHandler.code == 0:
+		return exitHandler.code
+	case exitHandler.code != -1:
 		fmt.Fprintf(os.Stderr, "%s", exitHandler.message)
 		return exitHandler.code
 	}
