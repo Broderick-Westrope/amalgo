@@ -106,8 +106,15 @@ func processPaths(paths *[]PathInfo) error {
 	}
 
 	// Create a map to deduplicate paths.
-	seen := make(map[string]bool)
-	result := make([]PathInfo, 0)
+	seen := make(map[string]struct{})
+	for _, path := range *paths {
+		seen[path.Path] = struct{}{}
+	}
+
+	result := make([]PathInfo, len(*paths))
+	if copy(result, *paths) != len(*paths) {
+		return errors.New("failed to copy paths to result slice")
+	}
 
 	for _, p := range *paths {
 		// Split the relative path to process each component.
@@ -131,8 +138,8 @@ func processPaths(paths *[]PathInfo) error {
 			currentAbs = filepath.Join(currentAbs, comp)
 
 			// Only add if we haven't seen this path before.
-			if !seen[currentAbs] {
-				seen[currentAbs] = true
+			if _, exists := seen[currentAbs]; !exists {
+				seen[currentAbs] = struct{}{}
 				result = append(result, PathInfo{
 					Path:         currentAbs,
 					RelativePath: currentRel,
@@ -140,13 +147,6 @@ func processPaths(paths *[]PathInfo) error {
 					IsDir:        true,
 				})
 			}
-		}
-	}
-
-	// Add all original paths that we haven't seen yet.
-	for _, p := range *paths {
-		if !seen[p.Path] {
-			result = append(result, p)
 		}
 	}
 

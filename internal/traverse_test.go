@@ -145,6 +145,12 @@ func TestProcessPaths(t *testing.T) {
 			},
 			wantPaths: []PathInfo{
 				{
+					Path:         "/Users/someuser/dev/program/internal/file1.go",
+					RelativePath: "program/internal/file1.go",
+					Depth:        3,
+					IsDir:        false,
+				},
+				{
 					Path:         "/Users/someuser/dev/program",
 					RelativePath: "program",
 					Depth:        1,
@@ -155,12 +161,6 @@ func TestProcessPaths(t *testing.T) {
 					RelativePath: "program/internal",
 					Depth:        2,
 					IsDir:        true,
-				},
-				{
-					Path:         "/Users/someuser/dev/program/internal/file1.go",
-					RelativePath: "program/internal/file1.go",
-					Depth:        3,
-					IsDir:        false,
 				},
 			},
 		},
@@ -181,18 +181,6 @@ func TestProcessPaths(t *testing.T) {
 			},
 			wantPaths: []PathInfo{
 				{
-					Path:         "/Users/someuser/dev/program",
-					RelativePath: "program",
-					Depth:        1,
-					IsDir:        true,
-				},
-				{
-					Path:         "/Users/someuser/dev/program/internal",
-					RelativePath: "program/internal",
-					Depth:        2,
-					IsDir:        true,
-				},
-				{
 					Path:         "/Users/someuser/dev/program/internal/file1.go",
 					RelativePath: "program/internal/file1.go",
 					Depth:        3,
@@ -203,6 +191,18 @@ func TestProcessPaths(t *testing.T) {
 					RelativePath: "program/internal/file2.go",
 					Depth:        3,
 					IsDir:        false,
+				},
+				{
+					Path:         "/Users/someuser/dev/program",
+					RelativePath: "program",
+					Depth:        1,
+					IsDir:        true,
+				},
+				{
+					Path:         "/Users/someuser/dev/program/internal",
+					RelativePath: "program/internal",
+					Depth:        2,
+					IsDir:        true,
 				},
 			},
 		},
@@ -223,6 +223,18 @@ func TestProcessPaths(t *testing.T) {
 			},
 			wantPaths: []PathInfo{
 				{
+					Path:         "/Users/someuser/dev/program/file1.go",
+					RelativePath: "program/file1.go",
+					Depth:        2,
+					IsDir:        false,
+				},
+				{
+					Path:         "/Users/someuser/dev/program/internal/deep/file2.go",
+					RelativePath: "program/internal/deep/file2.go",
+					Depth:        4,
+					IsDir:        false,
+				},
+				{
 					Path:         "/Users/someuser/dev/program",
 					RelativePath: "program",
 					Depth:        1,
@@ -239,18 +251,6 @@ func TestProcessPaths(t *testing.T) {
 					RelativePath: "program/internal/deep",
 					Depth:        3,
 					IsDir:        true,
-				},
-				{
-					Path:         "/Users/someuser/dev/program/file1.go",
-					RelativePath: "program/file1.go",
-					Depth:        2,
-					IsDir:        false,
-				},
-				{
-					Path:         "/Users/someuser/dev/program/internal/deep/file2.go",
-					RelativePath: "program/internal/deep/file2.go",
-					Depth:        4,
-					IsDir:        false,
 				},
 			},
 		},
@@ -271,12 +271,6 @@ func TestProcessPaths(t *testing.T) {
 			},
 			wantPaths: []PathInfo{
 				{
-					Path:         "/Users/someuser/dev/program",
-					RelativePath: "program",
-					Depth:        1,
-					IsDir:        true,
-				},
-				{
 					Path:         "/Users/someuser/dev/program/internal",
 					RelativePath: "program/internal",
 					Depth:        2,
@@ -287,6 +281,12 @@ func TestProcessPaths(t *testing.T) {
 					RelativePath: "program/internal/file1.go",
 					Depth:        3,
 					IsDir:        false,
+				},
+				{
+					Path:         "/Users/someuser/dev/program",
+					RelativePath: "program",
+					Depth:        1,
+					IsDir:        true,
 				},
 			},
 		},
