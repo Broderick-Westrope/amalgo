@@ -110,47 +110,63 @@ func getPatternFromLine(line string) (*regexp.Regexp, bool) {
 		line = line[1:]
 	}
 
+	// Create a copy of the line to modify. The original is maintained for later checks.
+	expr := line
+
 	// Ignore a prefix of escaped '#' or '!'.
-	if regexp.MustCompile(`^(\#|\!)`).MatchString(line) {
-		line = line[1:]
+	if regexp.MustCompile(`^(\#|\!)`).MatchString(expr) {
+		expr = expr[1:]
 	}
 
 	// Add leading '/' for patterns like 'foo/*.txt'.
-	if regexp.MustCompile(`([^\/+])/.*\*\.`).MatchString(line) && line[0] != '/' {
-		line = "/" + line
+	if regexp.MustCompile(`([^\/+])/.*\*\.`).MatchString(expr) && expr[0] != '/' {
+		expr = "/" + expr
 	}
 
 	// Escape dots.
-	line = regexp.MustCompile(`\.`).ReplaceAllString(line, `\.`)
+	expr = regexp.MustCompile(`\.`).ReplaceAllString(expr, `\.`)
 
 	// This 'magic star" is used temporarily when handling other single-star cases.
 	magicStar := "#$~"
 
 	// Handle '/**/' patterns.
-	if strings.HasPrefix(line, "/**/") {
-		line = line[1:]
+	if strings.HasPrefix(expr, "/**/") {
+		expr = expr[1:]
 	}
-	line = regexp.MustCompile(`/\*\*/`).ReplaceAllString(line, `(/|/.+/)`)
-	line = regexp.MustCompile(`\*\*/`).ReplaceAllString(line, `(|.`+magicStar+`/)`)
-	line = regexp.MustCompile(`/\*\*`).ReplaceAllString(line, `(|/.`+magicStar+`)`)
+	expr = regexp.MustCompile(`/\*\*/`).ReplaceAllString(expr, `(/|/.+/)`)
+	expr = regexp.MustCompile(`\*\*/`).ReplaceAllString(expr, `(|.`+magicStar+`/)`)
+	expr = regexp.MustCompile(`/\*\*`).ReplaceAllString(expr, `(|/.`+magicStar+`)`)
 
 	// Handle wildcards.
-	line = regexp.MustCompile(`\\\*`).ReplaceAllString(line, `\`+magicStar)
-	line = regexp.MustCompile(`\*`).ReplaceAllString(line, `([^/]*)`)
-	line = strings.Replace(line, "?", `\?`, -1)
-	line = strings.Replace(line, magicStar, "*", -1)
+	expr = regexp.MustCompile(`\\\*`).ReplaceAllString(expr, `\`+magicStar)
+	expr = regexp.MustCompile(`\*`).ReplaceAllString(expr, `([^/]*)`) // '*' may be anything other than '/'
+	expr = strings.Replace(expr, "?", `\?`, -1)                       // escape '?'
+	expr = strings.Replace(expr, magicStar, "*", -1)
 
 	// Build final regex.
-	var expr string
 	if strings.HasSuffix(line, "/") {
-		expr = line + "(|.*)$"
+		expr += "(|.*)$"
 	} else {
-		expr = line + "(|/.*)$"
+		expr += "(|/.*)$"
 	}
-	if strings.HasPrefix(expr, "/") {
+
+	// Only add directory prefix for patterns starting with /
+	switch {
+	case strings.HasPrefix(line, "/"):
 		expr = "^(|/)" + expr[1:]
-	} else {
+
+	case strings.HasPrefix(line, "**/"):
+		// Pattern contains a slash but doesn't start with one
 		expr = "^(|.*/)" + expr
+
+	case strings.Contains(line, "/"):
+		// If pattern contains / but doesn't start with one,
+		// it can match anywhere in the path after the first component
+		expr = `^[^\/]*` + expr
+
+	default:
+		// Simple pattern like *.go - should only match in current directory
+		expr = "^" + expr
 	}
 
 	pattern, _ := regexp.Compile(expr)
