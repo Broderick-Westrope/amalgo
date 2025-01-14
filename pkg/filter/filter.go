@@ -10,8 +10,8 @@ import (
 	"strings"
 )
 
-// Filterer wraps a list of filter patterns.
-type Filterer struct {
+// Filter wraps a list of filter patterns.
+type Filter struct {
 	patterns []*Pattern
 }
 
@@ -24,13 +24,13 @@ type Pattern struct {
 }
 
 // MatchesPath returns true if the path matches the patterns.
-func (f *Filterer) MatchesPath(path string) bool {
+func (f *Filter) MatchesPath(path string) bool {
 	matches, _ := f.MatchesPathHow(path)
 	return matches
 }
 
 // MatchesPathHow returns whether the path matches and which pattern matched it.
-func (f *Filterer) MatchesPathHow(path string) (bool, *Pattern) {
+func (f *Filter) MatchesPathHow(path string) (bool, *Pattern) {
 	// Normalize path separators.
 	path = filepath.ToSlash(path)
 
@@ -54,8 +54,8 @@ func (f *Filterer) MatchesPathHow(path string) (bool, *Pattern) {
 
 // CompileFilterPatterns accepts a variadic set of strings and returns a Filterer
 // instance with the compiled patterns.
-func CompileFilterPatterns(patterns ...string) *Filterer {
-	f := new(Filterer)
+func CompileFilterPatterns(patterns ...string) *Filter {
+	f := new(Filter)
 	for i, pattern := range patterns {
 		pattern = strings.TrimRight(pattern, "\r")
 		pattern = strings.TrimSpace(pattern)
@@ -69,7 +69,7 @@ func CompileFilterPatterns(patterns ...string) *Filterer {
 }
 
 // CompileFilterPatternFile reads patterns from a file and compiles them.
-func CompileFilterPatternFile(path string) (*Filterer, error) {
+func CompileFilterPatternFile(path string) (*Filter, error) {
 	bs, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
@@ -80,7 +80,7 @@ func CompileFilterPatternFile(path string) (*Filterer, error) {
 }
 
 // CompileExcludePatternFileAndLines compiles patterns from both a file and additional lines.
-func CompileFilterPatternFileAndLines(path string, lines ...string) (*Filterer, error) {
+func CompileFilterPatternFileAndLines(path string, lines ...string) (*Filter, error) {
 	bs, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
