@@ -134,8 +134,8 @@ func getPatternFromLine(line string) (*regexp.Regexp, bool) {
 
 	// Handle wildcards.
 	expr = regexp.MustCompile(`\\\*`).ReplaceAllString(expr, `\`+magicStar)
-	expr = regexp.MustCompile(`\*`).ReplaceAllString(expr, `([^/]*)`) // '*' may be anything other than '/'
-	expr = strings.Replace(expr, "?", `\?`, -1)                       // escape '?'
+	expr = regexp.MustCompile(`\*`).ReplaceAllString(expr, `([^/]*)`) // '*' may be any number of characters other than '/'
+	expr = strings.Replace(expr, "?", `[^/]`, -1)                     // '?' may be any single character other than '/'
 	expr = strings.Replace(expr, magicStar, "*", -1)
 
 	// Build final regex.
