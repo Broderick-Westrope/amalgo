@@ -1,8 +1,10 @@
 package internal
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -46,22 +48,30 @@ func TestTraverseDirectories(t *testing.T) {
 			directories:    []string{filepath.Join(tmpDir, "src")},
 			filterPatterns: []string{"*.go"},
 			wantRelPaths: []string{
-				"main.go",
+				"src/main.go",
+			},
+		},
+		"match all go files": {
+			directories:    []string{filepath.Join(tmpDir, "src")},
+			filterPatterns: []string{"**/*.go"},
+			wantRelPaths: []string{
+				"src/main.go",
+				"src/internal/util.go",
 			},
 		},
 		"exclude directory": {
 			directories:    []string{filepath.Join(tmpDir, "src")},
 			filterPatterns: []string{"*.go", "**/*.go", "!internal/**"},
 			wantRelPaths: []string{
-				"main.go",
+				"src/main.go",
 			},
 		},
 		"match specific directory": {
 			directories:    []string{filepath.Join(tmpDir, "src", "internal")},
 			filterPatterns: []string{"*"},
 			wantRelPaths: []string{
-				"util.go",
-				"test.txt",
+				"internal/util.go",
+				"internal/test.txt",
 			},
 		},
 		"non-existent directory": {
@@ -73,7 +83,7 @@ func TestTraverseDirectories(t *testing.T) {
 			directories:    []string{filepath.Join(tmpDir, "src", "main.go")},
 			filterPatterns: []string{"*.go"},
 			wantRelPaths: []string{
-				"main.go",
+				"src/main.go",
 			},
 		},
 	}
@@ -107,12 +117,205 @@ func TestTraverseDirectories(t *testing.T) {
 				assert.False(t, filepath.IsAbs(p.RelativePath), "RelativePath should be relative: %s", p.RelativePath)
 
 				// Depth should match the number of path separators plus one.
-				expectedDepth := 1
+				expectedDepth := 0
 				if p.RelativePath != "" {
-					expectedDepth = len(filepath.SplitList(filepath.FromSlash(p.RelativePath)))
+					expectedDepth = len(strings.Split(p.RelativePath, "/"))
 				}
 				assert.Equal(t, expectedDepth, p.Depth, "Incorrect depth for path: %s", p.RelativePath)
 			}
+		})
+	}
+}
+
+func TestProcessPaths(t *testing.T) {
+	var nilPathInfoSlice []PathInfo = nil
+	tests := map[string]struct {
+		paths     *[]PathInfo
+		wantPaths []PathInfo
+		wantErr   error
+	}{
+		"single file adds parent dirs": {
+			paths: &[]PathInfo{
+				{
+					Path:         "/Users/someuser/dev/program/internal/file1.go",
+					RelativePath: "program/internal/file1.go",
+					Depth:        3,
+					IsDir:        false,
+				},
+			},
+			wantPaths: []PathInfo{
+				{
+					Path:         "/Users/someuser/dev/program",
+					RelativePath: "program",
+					Depth:        1,
+					IsDir:        true,
+				},
+				{
+					Path:         "/Users/someuser/dev/program/internal",
+					RelativePath: "program/internal",
+					Depth:        2,
+					IsDir:        true,
+				},
+				{
+					Path:         "/Users/someuser/dev/program/internal/file1.go",
+					RelativePath: "program/internal/file1.go",
+					Depth:        3,
+					IsDir:        false,
+				},
+			},
+		},
+		"multiple files same directory": {
+			paths: &[]PathInfo{
+				{
+					Path:         "/Users/someuser/dev/program/internal/file1.go",
+					RelativePath: "program/internal/file1.go",
+					Depth:        3,
+					IsDir:        false,
+				},
+				{
+					Path:         "/Users/someuser/dev/program/internal/file2.go",
+					RelativePath: "program/internal/file2.go",
+					Depth:        3,
+					IsDir:        false,
+				},
+			},
+			wantPaths: []PathInfo{
+				{
+					Path:         "/Users/someuser/dev/program",
+					RelativePath: "program",
+					Depth:        1,
+					IsDir:        true,
+				},
+				{
+					Path:         "/Users/someuser/dev/program/internal",
+					RelativePath: "program/internal",
+					Depth:        2,
+					IsDir:        true,
+				},
+				{
+					Path:         "/Users/someuser/dev/program/internal/file1.go",
+					RelativePath: "program/internal/file1.go",
+					Depth:        3,
+					IsDir:        false,
+				},
+				{
+					Path:         "/Users/someuser/dev/program/internal/file2.go",
+					RelativePath: "program/internal/file2.go",
+					Depth:        3,
+					IsDir:        false,
+				},
+			},
+		},
+		"different directory depths": {
+			paths: &[]PathInfo{
+				{
+					Path:         "/Users/someuser/dev/program/file1.go",
+					RelativePath: "program/file1.go",
+					Depth:        2,
+					IsDir:        false,
+				},
+				{
+					Path:         "/Users/someuser/dev/program/internal/deep/file2.go",
+					RelativePath: "program/internal/deep/file2.go",
+					Depth:        4,
+					IsDir:        false,
+				},
+			},
+			wantPaths: []PathInfo{
+				{
+					Path:         "/Users/someuser/dev/program",
+					RelativePath: "program",
+					Depth:        1,
+					IsDir:        true,
+				},
+				{
+					Path:         "/Users/someuser/dev/program/internal",
+					RelativePath: "program/internal",
+					Depth:        2,
+					IsDir:        true,
+				},
+				{
+					Path:         "/Users/someuser/dev/program/internal/deep",
+					RelativePath: "program/internal/deep",
+					Depth:        3,
+					IsDir:        true,
+				},
+				{
+					Path:         "/Users/someuser/dev/program/file1.go",
+					RelativePath: "program/file1.go",
+					Depth:        2,
+					IsDir:        false,
+				},
+				{
+					Path:         "/Users/someuser/dev/program/internal/deep/file2.go",
+					RelativePath: "program/internal/deep/file2.go",
+					Depth:        4,
+					IsDir:        false,
+				},
+			},
+		},
+		"directory included": {
+			paths: &[]PathInfo{
+				{
+					Path:         "/Users/someuser/dev/program/internal",
+					RelativePath: "program/internal",
+					Depth:        2,
+					IsDir:        true,
+				},
+				{
+					Path:         "/Users/someuser/dev/program/internal/file1.go",
+					RelativePath: "program/internal/file1.go",
+					Depth:        3,
+					IsDir:        false,
+				},
+			},
+			wantPaths: []PathInfo{
+				{
+					Path:         "/Users/someuser/dev/program",
+					RelativePath: "program",
+					Depth:        1,
+					IsDir:        true,
+				},
+				{
+					Path:         "/Users/someuser/dev/program/internal",
+					RelativePath: "program/internal",
+					Depth:        2,
+					IsDir:        true,
+				},
+				{
+					Path:         "/Users/someuser/dev/program/internal/file1.go",
+					RelativePath: "program/internal/file1.go",
+					Depth:        3,
+					IsDir:        false,
+				},
+			},
+		},
+		"empty slice": {
+			paths:     &[]PathInfo{},
+			wantPaths: []PathInfo{},
+		},
+		"nil slice": {
+			paths:     &nilPathInfoSlice,
+			wantPaths: []PathInfo{},
+			wantErr:   errors.New("underlying paths slice cannot be nil"),
+		},
+		"nil pointer": {
+			paths:     nil,
+			wantPaths: []PathInfo{},
+			wantErr:   errors.New("paths must be a pointer to a slice"),
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			err := processPaths(tt.paths)
+			if tt.wantErr != nil {
+				assert.EqualError(t, err, tt.wantErr.Error())
+				return
+			}
+			require.NoError(t, err)
+
+			assert.Equal(t, tt.wantPaths, *tt.paths)
 		})
 	}
 }
