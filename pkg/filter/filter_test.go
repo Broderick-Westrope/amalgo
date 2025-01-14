@@ -1,6 +1,7 @@
 package filter
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -229,6 +230,102 @@ func TestMatchesPathHow(t *testing.T) {
 			assert.NotNil(t, gotPattern)
 			assert.Equal(t, tc.wantMatchLine, gotPattern.Line)
 			assert.Equal(t, tc.wantMatchNegate, gotPattern.Negate)
+		})
+	}
+}
+
+func TestFilterPatternMatching(t *testing.T) {
+	tests := map[string]struct {
+		patterns    []string
+		pathsToWant map[string]bool
+	}{
+		"match all files": {
+			patterns: []string{"*"},
+			pathsToWant: map[string]bool{
+				"main.go":              true,
+				"internal/util.go":     true,
+				"src/main.go":          true,
+				"src/internal/util.go": true,
+				"README.md":            true,
+				"internal/test.txt":    true,
+			},
+		},
+		"match all files except top-level hidden files and directories": {
+			patterns: []string{"*", "!.*"},
+			pathsToWant: map[string]bool{
+				"main.go":              true,
+				"internal/util.go":     true,
+				"src/main.go":          true,
+				"src/internal/util.go": true,
+				"src/.env":             true,
+				"README.md":            true,
+				"internal/test.txt":    true,
+
+				".git/config.txt": false,
+				".env":            false,
+			},
+		},
+		"match all files except recursive hidden files and directories": {
+			patterns: []string{"*", "!**/.*"},
+			pathsToWant: map[string]bool{
+				"main.go":              true,
+				"internal/util.go":     true,
+				"src/main.go":          true,
+				"src/internal/util.go": true,
+				"README.md":            true,
+				"internal/test.txt":    true,
+
+				"src/.env":        false,
+				".git/config.txt": false,
+				".env":            false,
+			},
+		},
+		"match top-level go files": {
+			patterns: []string{"*.go"},
+			pathsToWant: map[string]bool{
+				"main.go": true,
+
+				"internal/util.go":     false,
+				"src/main.go":          false,
+				"src/internal/util.go": false,
+				"README.md":            false,
+				"internal/test.txt":    false,
+			},
+		},
+		"match go files recursively": {
+			patterns: []string{"**/*.go"},
+			pathsToWant: map[string]bool{
+				"main.go":              true,
+				"internal/util.go":     true,
+				"src/main.go":          true,
+				"src/internal/util.go": true,
+
+				"README.md":         false,
+				"internal/test.txt": false,
+			},
+		},
+		"match go files recursively with negation": {
+			patterns: []string{"**/*.go", "!internal/**"},
+			pathsToWant: map[string]bool{
+				"main.go":              true,
+				"src/main.go":          true,
+				"src/internal/util.go": true,
+
+				"internal/util.go":  false,
+				"README.md":         false,
+				"internal/test.txt": false,
+			},
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			f := CompileFilterPatterns(tt.patterns...)
+
+			for path, want := range tt.pathsToWant {
+				got := f.MatchesPath(path)
+				assert.Equal(t, want, got, "Patterns: %q, Path: %q", strings.Join(tt.patterns, ","), path)
+			}
 		})
 	}
 }
