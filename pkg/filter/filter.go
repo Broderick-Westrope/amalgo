@@ -23,7 +23,17 @@ type Pattern struct {
 	Line    string
 }
 
-func (f *Filter) Merge(other *Filter) {
+// MergeWithoutPrecedence prepends the patterns of the given filter.
+// The provided patterns will be used first, meaning they may be
+// overruled by the existing patterns (on this Filter).
+func (f *Filter) MergeWithoutPrecedence(other *Filter) {
+	f.patterns = append(other.patterns, f.patterns...)
+}
+
+// MergeWithoutPrecedence appends the patterns of the given filter.
+// The provided patterns will be used last, meaning they may
+// overrule the existing patterns (on this Filter).
+func (f *Filter) MergeWithPrecedence(other *Filter) {
 	f.patterns = append(f.patterns, other.patterns...)
 }
 

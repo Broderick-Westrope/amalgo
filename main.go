@@ -58,7 +58,7 @@ type RootCmd struct {
 	Output        string                `help:"Specifies the destination path for the output file. The file extension will automatically adjust based on the selected format (see '--format')." short:"o" type:"path" placeholder:"amalgo.txt"`
 	Stdout        bool                  `help:"Redirects all output to standard output (terminal) instead of writing to a file. Useful for piping output to other commands."`
 	Filter        []string              `help:"Controls which files are processed using glob patterns. Include patterns are processed first, then exclude patterns (prefixed with '!'). Hidden files and directories are excluded by default." short:"f" default:"*,!.*"`
-	GitIgnore     []string              `help:"Specifies .gitignore files to use for filtering. These patterns are merged with the filter patterns, taking the same precedence." name:"gitignore" short:"g"`
+	GitIgnore     []string              `help:"Specifies .gitignore files to use for filtering. These patterns are processed before the filter patterns, taking precedence. Of the provided gitignore files, the last one will take the highest precedence." name:"gitignore" short:"g"`
 	NoTree        bool                  `help:"Skips the inclusion of the file tree in the output." default:"false"`
 	NoDump        bool                  `help:"Skips the inclusion of file contents in the output." default:"false"`
 	Outline       bool                  `help:"Includes in the output a language-aware outline of code files, showing functions, classes, and other significant elements. Only available for specific file extensions: '.go'." default:"false"`

@@ -21,15 +21,16 @@ type PathInfo struct {
 
 // TraverseDirectory traverses the directory and collects path information using the filter package
 func TraverseDirectory(dir string, filterPatterns, gitignorePaths []string) ([]PathInfo, error) {
-	// Create the filter from filter patterns and negated gitignore file patterns.
+	// Create the filter from filter patterns.
 	f := filter.CompileFilterPatterns(filterPatterns...)
+	// Create the gitignore filter from gitignore file paths.
+	gi := new(filter.Filter)
 	for _, giPath := range gitignorePaths {
-		giFilter, err := filter.CompileFilterPatternFile(giPath)
+		tempFilter, err := filter.CompileFilterPatternFile(giPath)
 		if err != nil {
 			return nil, fmt.Errorf("compiling patterns from gitignore file %q: %w", giPath, err)
 		}
-		giFilter.NegateAll()
-		f.Merge(giFilter)
+		gi.MergeWithPrecedence(tempFilter)
 	}
 
 	paths := make([]PathInfo, 0)
@@ -72,24 +73,24 @@ func TraverseDirectory(dir string, filterPatterns, gitignorePaths []string) ([]P
 		if err != nil {
 			return fmt.Errorf("getting relative path between %q and %q: %w", basePath, path, err)
 		}
-
-		// Convert to forward slashes for consistent pattern matching
 		relPath = filepath.ToSlash(relPath)
 
-		// Check if a file path should be included based on patterns
-		if f.MatchesPath(relPath) {
-			relPath, err = filepath.Rel(baseParent, path)
-			if err != nil {
-				return fmt.Errorf("getting relative path between %q and %q: %w", baseParent, path, err)
-			}
-
-			paths = append(paths, PathInfo{
-				Path:         path,
-				RelativePath: relPath,
-				Depth:        strings.Count(relPath, "/") + 1,
-				IsDir:        false,
-			})
+		if gi.MatchesPath(relPath) || !f.MatchesPath(relPath) {
+			return nil
 		}
+
+		relPath, err = filepath.Rel(baseParent, path)
+		if err != nil {
+			return fmt.Errorf("getting relative path between %q and %q: %w", basePath, path, err)
+		}
+		relPath = filepath.ToSlash(relPath)
+
+		paths = append(paths, PathInfo{
+			Path:         path,
+			RelativePath: relPath,
+			Depth:        strings.Count(relPath, "/") + 1,
+			IsDir:        false,
+		})
 		return nil
 	})
 	if err != nil {

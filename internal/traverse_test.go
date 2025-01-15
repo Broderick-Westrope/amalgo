@@ -111,6 +111,14 @@ func TestTraverseDirectories(t *testing.T) {
 				"src/internal/util.go",
 			},
 		},
+		"match specific file with conflicting gitignore": {
+			directory:      filepath.Join(tmpDir, "src"),
+			filterPatterns: []string{"internal/test.txt"},
+			gitignorePaths: []string{
+				filepath.Join(tmpDir, ".gitignore"),
+			},
+			wantRelPaths: []string{},
+		},
 	}
 
 	for name, tt := range tests {
